@@ -17,13 +17,13 @@ class BroadcastScreen extends StatefulWidget {
 class _BroadcastScreenState extends State<BroadcastScreen>
     with TickerProviderStateMixin {
   late AnimationController _refreshController;
-  late AnimationController _fabAnimationController;
+  // Removed _fabAnimationController since FAB will always be visible.
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   String _searchQuery = '';
   bool _isLoading = false;
-  bool _isFabVisible = true;
+  // Removed _isFabVisible since FAB will always be visible.
   String _userName = 'Alex Chen';
 
   // Dummy posts data
@@ -138,38 +138,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   ];
 
   // Trending topics with icons
-  final List<Map<String, dynamic>> _trendingTopics = [
-    {
-      'icon': Icons.bolt,
-      'topic': '#FinalExams',
-      'posts': '234',
-      'color': NexoraColors.warning,
-    },
-    {
-      'icon': Icons.code,
-      'topic': '#Hackathon2024',
-      'posts': '156',
-      'color': NexoraColors.accentCyan,
-    },
-    {
-      'icon': Icons.people,
-      'topic': '#CampusLife',
-      'posts': '892',
-      'color': NexoraColors.primaryPurple,
-    },
-    {
-      'icon': Icons.menu_book,
-      'topic': '#StudyGroup',
-      'posts': '67',
-      'color': NexoraColors.success,
-    },
-    {
-      'icon': Icons.weekend,
-      'topic': '#WeekendVibes',
-      'posts': '445',
-      'color': NexoraColors.romanticPink,
-    },
-  ];
 
   List<Map<String, dynamic>> get filteredPosts {
     if (_searchQuery.isEmpty) return _posts;
@@ -193,32 +161,12 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _fabAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-
-    _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.reverse) {
-        if (_isFabVisible) {
-          setState(() => _isFabVisible = false);
-          _fabAnimationController.forward();
-        }
-      } else if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.forward) {
-        if (!_isFabVisible) {
-          setState(() => _isFabVisible = true);
-          _fabAnimationController.reverse();
-        }
-      }
-    });
+    // Removed FAB hide/show scroll listener.
   }
 
   @override
   void dispose() {
     _refreshController.dispose();
-    _fabAnimationController.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -767,170 +715,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
                 // Trending Stories Section
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20, bottom: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 20, bottom: 12),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      NexoraColors.warning.withOpacity(0.3),
-                                      NexoraColors.warning.withOpacity(0.1),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.whatshot,
-                                  color: NexoraColors.warning,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Trending Now',
-                                style: TextStyle(
-                                  color: NexoraColors.textPrimary,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _trendingTopics.length,
-                            itemBuilder: (context, index) {
-                              final topic = _trendingTopics[index];
-                              return Container(
-                                width: 140,
-                                margin: const EdgeInsets.only(right: 12),
-                                child: GlassContainer(
-                                  borderRadius: 16,
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              color: topic['color'].withOpacity(
-                                                0.2,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: Icon(
-                                              topic['icon'],
-                                              color: topic['color'],
-                                              size: 14,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: topic['color'].withOpacity(
-                                                0.2,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              '${topic['posts']} posts',
-                                              style: TextStyle(
-                                                color: topic['color'],
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Text(
-                                        topic['topic'],
-                                        style: const TextStyle(
-                                          color: NexoraColors.textPrimary,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _searchQuery = topic['topic']
-                                                .replaceAll('#', '');
-                                            _searchController.text =
-                                                _searchQuery;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: topic['color'].withOpacity(
-                                              0.15,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                'Explore',
-                                                style: TextStyle(
-                                                  color: topic['color'],
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 2),
-                                              Icon(
-                                                Icons.arrow_forward,
-                                                color: topic['color'],
-                                                size: 10,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
                 const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
                 // Feed Header
@@ -993,25 +777,17 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             ),
           ),
         ),
-        floatingActionButton: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          transform: Matrix4.translationValues(0, _isFabVisible ? 0 : 100, 0),
-          child: FloatingActionButton.extended(
-            onPressed: _createPost,
-            backgroundColor: NexoraColors.primaryPurple,
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              'Create Post',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _createPost,
+          backgroundColor: NexoraColors.primaryPurple,
+          elevation: 8,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          icon: const Icon(Icons.add, color: Colors.white),
+          label: const Text(
+            'Create Post',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ),
       ),
