@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/dark_background.dart';
 import 'auth_wrapper.dart';
@@ -71,8 +72,8 @@ class _SplashScreenState extends State<SplashScreen>
                     children: [
                       // Logo
                       Container(
-                        width: 120,
-                        height: 120,
+                        width: 120.r,
+                        height: 120.r,
                         decoration: BoxDecoration(
                           gradient: NexoraGradients.primaryButton,
                           shape: BoxShape.circle,
@@ -81,28 +82,28 @@ class _SplashScreenState extends State<SplashScreen>
                         child: ClipOval(
                           child: Image.asset(
                             'assets/logo/image.png',
-                            width: 120,
-                            height: 120,
+                            width: 120.r,
+                            height: 120.r,
                             fit: BoxFit.cover,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: 24.h),
                       // App name
                       Text(
                         'Kootu',
                         style: NexoraTextStyles.headline2.copyWith(
-                          letterSpacing: 6,
+                          letterSpacing: 6.w,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8.h),
                       // Tagline
                       Text(
                         'where campus hearts collide',
                         style: NexoraTextStyles.bodyMedium,
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(height: 40.h),
 
                       // Simple loading indicator
                     ],

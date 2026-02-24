@@ -437,6 +437,54 @@ class DummyDatabase extends GetxService {
       timestamp: DateTime.now().subtract(const Duration(hours: 5)),
       isRead: true,
     ),
+    NotificationData(
+      id: 'notif_006',
+      type: NotificationType.connectionRequest,
+      userId: 'user_005',
+      message: 'sent you a connection request',
+      timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
+      isRead: false,
+    ),
+    NotificationData(
+      id: 'notif_007',
+      type: NotificationType.profileLike,
+      userId: 'user_004',
+      message: 'liked your profile',
+      timestamp: DateTime.now().subtract(const Duration(minutes: 45)),
+      isRead: false,
+    ),
+    NotificationData(
+      id: 'notif_008',
+      type: NotificationType.message,
+      userId: 'user_001',
+      message: 'sent you a message: "Hey, are you coming to the meetup?"',
+      timestamp: DateTime.now().subtract(const Duration(minutes: 10)),
+      isRead: false,
+    ),
+    NotificationData(
+      id: 'notif_009',
+      type: NotificationType.connectionRequest,
+      userId: 'user_007',
+      message: 'sent you a connection request',
+      timestamp: DateTime.now().subtract(const Duration(hours: 3)),
+      isRead: false,
+    ),
+    NotificationData(
+      id: 'notif_010',
+      type: NotificationType.profileLike,
+      userId: 'user_003',
+      message: 'liked your profile',
+      timestamp: DateTime.now().subtract(const Duration(hours: 1, minutes: 30)),
+      isRead: false,
+    ),
+    NotificationData(
+      id: 'notif_011',
+      type: NotificationType.message,
+      userId: 'user_006',
+      message: 'sent you a message: "Check out this cool project!"',
+      timestamp: DateTime.now().subtract(const Duration(hours: 4)),
+      isRead: true,
+    ),
   ].obs;
 
   // ========== POSTS/FEED DATABASE ==========
@@ -851,6 +899,8 @@ class DummyDatabase extends GetxService {
     String? instagram,
     String? spotify,
     String? lookingFor,
+    String? avatarSeed,
+    String? avatarStyle,
   }) {
     final user = currentUser.value;
     currentUser.value = UserData(
@@ -871,6 +921,8 @@ class DummyDatabase extends GetxService {
       spotifyTrackName: user.spotifyTrackName,
       spotifyArtist: user.spotifyArtist,
       lookingFor: lookingFor ?? user.lookingFor,
+      avatarSeed: avatarSeed ?? user.avatarSeed,
+      avatarStyle: avatarStyle ?? user.avatarStyle,
       photos: user.photos,
       createdAt: user.createdAt,
       lastActive: DateTime.now(),
@@ -930,6 +982,8 @@ class UserData {
   final String? spotifyTrackName;
   final String? spotifyArtist;
   final String? lookingFor;
+  final String avatarSeed;
+  final String avatarStyle;
   final List<String>? photos;
   final DateTime? createdAt;
   final DateTime? lastActive;
@@ -957,6 +1011,8 @@ class UserData {
     this.spotifyTrackName,
     this.spotifyArtist,
     this.lookingFor,
+    this.avatarSeed = '',
+    this.avatarStyle = 'avataaars',
     this.photos,
     this.createdAt,
     this.lastActive,
@@ -1077,6 +1133,8 @@ enum NotificationType {
   event,
   mention,
   connectionRequest,
+  message,
+  profileLike,
 }
 
 class PostData {

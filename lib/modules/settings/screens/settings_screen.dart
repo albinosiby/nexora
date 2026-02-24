@@ -5,10 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/widgets/dark_background.dart';
-import '../../connections/repositories/connection_service.dart';
+import '../../profile/repositories/user_repository.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../connections/screens/connections_screen.dart';
+import 'help_center_screen.dart';
+import 'privacy_policy_screen.dart';
+import 'feedback_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,9 +24,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = true;
   bool _messageNotifications = true;
-  bool _eventNotifications = true;
+  bool _feedNotifications = true;
   bool _showOnlineStatus = true;
   bool _showLastSeen = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = UserRepository.instance.currentUser;
+    _notificationsEnabled = user.pushNotifications;
+    _messageNotifications = user.messageNotifications;
+    _feedNotifications = user.feedNotifications;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           top: false,
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20.r),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -105,7 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               borderRadius: BorderRadius.circular(12.r),
               border: Border.all(
                 color: NexoraColors.primaryPurple.withOpacity(0.3),
-                width: 1,
+                width: 1.w,
               ),
             ),
             child: Icon(icon, color: NexoraColors.primaryPurple, size: 16.sp),
@@ -139,7 +151,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: 'Edit Profile',
           subtitle: 'Personal info',
           color: NexoraColors.primaryPurple,
-          onTap: () {},
+          onTap: () => Get.to(
+            () =>
+                EditProfileScreen(profile: UserRepository.instance.currentUser),
+          ),
         ),
         _buildAccountGridItem(
           icon: Icons.people,
@@ -210,7 +225,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: 'Push Notifications',
           description: 'Receive push alerts',
           value: _notificationsEnabled,
-          onChanged: (value) => setState(() => _notificationsEnabled = value),
+          onChanged: (value) {
+            setState(() => _notificationsEnabled = value);
+            _updateNotificationPreference(push: value);
+          },
           color: NexoraColors.primaryPurple,
         ),
         SizedBox(height: 8.h),
@@ -219,16 +237,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: 'Message Notifications',
           description: 'New message alerts',
           value: _messageNotifications,
-          onChanged: (value) => setState(() => _messageNotifications = value),
+          onChanged: (value) {
+            setState(() => _messageNotifications = value);
+            _updateNotificationPreference(message: value);
+          },
           color: NexoraColors.romanticPink,
         ),
         SizedBox(height: 8.h),
         _buildNotificationCard(
-          icon: Icons.event,
-          title: 'Event Notifications',
-          description: 'Campus event updates',
-          value: _eventNotifications,
-          onChanged: (value) => setState(() => _eventNotifications = value),
+          icon: Icons.rss_feed,
+          title: 'Feed Notifications',
+          description: 'New post and feed updates',
+          value: _feedNotifications,
+          onChanged: (value) {
+            setState(() => _feedNotifications = value);
+            _updateNotificationPreference(feed: value);
+          },
           color: NexoraColors.success,
         ),
       ],
@@ -304,28 +328,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: 'Help Center',
           subtitle: 'Get assistance',
           color: NexoraColors.primaryPurple,
-          onTap: () {},
+          onTap: () => Get.to(() => const HelpCenterScreen()),
         ),
         _buildSupportItem(
           icon: Icons.feedback,
           title: 'Feedback',
           subtitle: 'Share thoughts',
           color: NexoraColors.romanticPink,
-          onTap: () {},
+          onTap: () => Get.to(() => const FeedbackScreen()),
         ),
         _buildSupportItem(
           icon: Icons.description,
           title: 'Terms',
           subtitle: 'Service terms',
           color: NexoraColors.success,
-          onTap: () {},
+          onTap: _showTermsDialog,
         ),
         _buildSupportItem(
           icon: Icons.privacy_tip,
           title: 'Privacy',
           subtitle: 'Data policy',
           color: NexoraColors.warning,
-          onTap: () {},
+          onTap: () => Get.to(() => const PrivacyPolicyScreen()),
         ),
       ],
     );
@@ -506,10 +530,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: NexoraColors.warning.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.logout,
                   color: NexoraColors.warning,
-                  size: 40,
+                  size: 40.r,
                 ),
               ),
               SizedBox(height: 16.h),
@@ -572,5 +596,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        content: GlassContainer(
+          borderRadius: 24.r,
+          padding: EdgeInsets.all(20.w),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Terms of Service',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.bold,
+                  color: NexoraColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: 16.h),
+              SizedBox(
+                height: 300.h,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Text(
+                    'Welcome to Nexora. By using our application, you agree to the following terms:\n\n'
+                    '1. Eligibility: You must be a student or faculty member of the affiliated campus.\n\n'
+                    '2. Conduct: Users must treat others with respect. Harassment, hate speech, and illegal activities are strictly prohibited.\n\n'
+                    '3. Content: You are responsible for the content you post. We reserve the right to remove content that violates our community guidelines.\n\n'
+                    '4. Privacy: We value your privacy as outlined in our Privacy Policy.\n\n'
+                    '5. Liability: Nexora is provided "as is" without any warranties.\n\n'
+                    '6. Changes: We may update these terms from time to time. Continued use of the app constitutes acceptance of the new terms.',
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color: NexoraColors.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20.h),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: NexoraColors.primaryPurple,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                  ),
+                  onPressed: () => Get.back(),
+                  child: const Text('I Understand'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _updateNotificationPreference({bool? push, bool? message, bool? feed}) {
+    final user = UserRepository.instance.currentUser;
+    final updatedUser = user.copyWith(
+      pushNotifications: push ?? user.pushNotifications,
+      messageNotifications: message ?? user.messageNotifications,
+      feedNotifications: feed ?? user.feedNotifications,
+    );
+    UserRepository.instance.updateProfile(updatedUser);
   }
 }

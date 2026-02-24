@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/dark_background.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/services/dummy_database.dart';
-import '../../../core/main_screen.dart';
-import 'user_details_screen.dart';
+import '../repositories/auth_repository.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,8 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Simulated OTP for demo
-  String _generatedOtp = '';
+  // Firebase Auth fields
+  String? _verificationId;
 
   Future<void> _sendOtp() async {
     if (phoneController.text.length != 10) {
@@ -44,33 +43,41 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Generate a random 6-digit OTP (for demo, always use 123456)
-    _generatedOtp = '123456';
-
-    setState(() {
-      _isLoading = false;
-      _currentStep = 1;
-    });
-
-    // Show OTP in snackbar for demo purposes
-    Get.snackbar(
-      'OTP Sent',
-      'Demo OTP: $_generatedOtp',
-      backgroundColor: NexoraColors.success.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 5),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-    );
-
-    // Focus first OTP field
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      otpFocusNodes[0].requestFocus();
-    });
+    try {
+      await AuthRepository.instance.signInWithPhoneNumber(
+        phoneController.text.trim(),
+        onCodeSent: (verificationId) {
+          setState(() {
+            _isLoading = false;
+            _verificationId = verificationId;
+            _currentStep = 1;
+          });
+          Get.snackbar(
+            'OTP Sent',
+            'Please check your messages',
+            backgroundColor: NexoraColors.success.withOpacity(0.9),
+            colorText: Colors.white,
+            snackPosition: SnackPosition.TOP,
+          );
+          // Focus first OTP field
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            otpFocusNodes[0].requestFocus();
+          });
+        },
+        onVerificationFailed: (e) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage =
+                e.message ?? 'Verification failed. Please try again.';
+          });
+        },
+      );
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Something went wrong. Please try again.';
+      });
+    }
   }
 
   Future<void> _verifyOtp() async {
@@ -83,46 +90,39 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (_verificationId == null) {
+      setState(() {
+        _errorMessage = 'Verification ID missing. Please resend OTP.';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    // Simulate verification delay
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (enteredOtp == _generatedOtp) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userPhone', phoneController.text);
-
-      // Check if user exists in database
-      final db = DummyDatabase.instance;
-      final existingUser = db.users.firstWhereOrNull(
-        (u) => u.phone == phoneController.text,
+    try {
+      final userCredential = await AuthRepository.instance.verifyOtp(
+        _verificationId!,
+        enteredOtp,
       );
 
-      setState(() {
-        _isLoading = false;
-      });
+      final firebaseUser = userCredential.user;
+      if (firebaseUser != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userPhone', phoneController.text);
+        await prefs.setString('userId', firebaseUser.uid);
 
-      if (existingUser != null) {
-        // Existing user - go to main screen
-        await prefs.setBool('isLoggedIn', true);
-        await prefs.setString('userName', existingUser.name);
-        await prefs.setString('userId', existingUser.id);
-        if (mounted) {
-          Get.offAll(() => const MainScreen());
-        }
-      } else {
-        // New user - go to details screen
-        if (mounted) {
-          Get.off(() => UserDetailsScreen(phoneNumber: phoneController.text));
-        }
+        setState(() {
+          _isLoading = false;
+        });
+        // Navigation is handled by AuthWrapper
       }
-    } else {
+    } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Invalid OTP. Please try again.';
+        _errorMessage = 'Invalid OTP or session expired. Please try again.';
       });
     }
   }
@@ -144,38 +144,38 @@ class _LoginScreenState extends State<LoginScreen> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(24.w),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Logo
                   Container(
-                    width: 90,
-                    height: 90,
+                    width: 90.r,
+                    height: 90.r,
                     decoration: BoxDecoration(
                       gradient: NexoraGradients.primaryButton,
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(28.r),
                       boxShadow: [NexoraShadows.purpleGlow],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.favorite,
                       color: NexoraColors.textPrimary,
-                      size: 45,
+                      size: 45.r,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Text("NEXORA", style: NexoraTextStyles.logoStyle),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 20.h),
+                  Text("Kootu", style: NexoraTextStyles.logoStyle),
+                  SizedBox(height: 8.h),
                   Text(
                     "WHERE CAMPUS HEARTS CONNECT",
                     style: NexoraTextStyles.taglineStyle,
                   ),
-                  const SizedBox(height: 40),
+                  SizedBox(height: 40.h),
 
                   // Main Card
                   GlassContainer(
                     borderRadius: 28,
-                    padding: const EdgeInsets.all(24),
+                    padding: EdgeInsets.all(24.w),
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: _currentStep == 0
@@ -184,13 +184,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24.h),
 
                   Text(
                     "By continuing, you agree to our Terms & Privacy Policy",
                     style: TextStyle(
                       color: NexoraColors.textMuted,
-                      fontSize: 12,
+                      fontSize: 12.sp,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -208,49 +208,50 @@ class _LoginScreenState extends State<LoginScreen> {
       key: const ValueKey('phone'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Enter your phone number',
           style: TextStyle(
             color: NexoraColors.textPrimary,
-            fontSize: 20,
+            fontSize: 20.sp,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Text(
           'We\'ll send you a verification code',
-          style: TextStyle(color: NexoraColors.textSecondary, fontSize: 14),
+          style: TextStyle(color: NexoraColors.textSecondary, fontSize: 14.sp),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: 24.h),
 
         // Phone Input
         Container(
           decoration: BoxDecoration(
             color: NexoraColors.glassBackground,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16.r),
             border: Border.all(
               color: _errorMessage != null
                   ? NexoraColors.romanticPink
                   : NexoraColors.glassBorder,
+              width: 1.w,
             ),
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 18,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
                 decoration: BoxDecoration(
                   border: Border(
-                    right: BorderSide(color: NexoraColors.glassBorder),
+                    right: BorderSide(
+                      color: NexoraColors.glassBorder,
+                      width: 1.w,
+                    ),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   '+91',
                   style: TextStyle(
                     color: NexoraColors.textPrimary,
-                    fontSize: 16,
+                    fontSize: 16.sp,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -260,20 +261,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: phoneController,
                   keyboardType: TextInputType.phone,
                   maxLength: 10,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: NexoraColors.textPrimary,
-                    fontSize: 16,
-                    letterSpacing: 2,
+                    fontSize: 16.sp,
+                    letterSpacing: 2.w,
                   ),
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: "10-digit number",
-                    hintStyle: TextStyle(color: NexoraColors.textMuted),
+                    hintStyle: const TextStyle(color: NexoraColors.textMuted),
                     border: InputBorder.none,
                     counterText: '',
                     contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 18,
+                      horizontal: 16.w,
+                      vertical: 18.h,
                     ),
                   ),
                   onChanged: (_) {
@@ -288,17 +289,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
 
         if (_errorMessage != null) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           Text(
             _errorMessage!,
-            style: const TextStyle(
-              color: NexoraColors.romanticPink,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: NexoraColors.romanticPink, fontSize: 12.sp),
           ),
         ],
 
-        const SizedBox(height: 24),
+        SizedBox(height: 24.h),
 
         // Continue Button
         _buildPrimaryButton(
@@ -328,54 +326,54 @@ class _LoginScreenState extends State<LoginScreen> {
                 });
               },
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(8.r),
                 decoration: BoxDecoration(
                   color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(10.r),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.arrow_back_ios_rounded,
                   color: NexoraColors.textPrimary,
-                  size: 16,
+                  size: 16.r,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12.w),
+            Expanded(
               child: Text(
                 'Verify OTP',
                 style: TextStyle(
                   color: NexoraColors.textPrimary,
-                  fontSize: 20,
+                  fontSize: 20.sp,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Text(
           'Enter the 6-digit code sent to +91 ${phoneController.text}',
-          style: TextStyle(color: NexoraColors.textSecondary, fontSize: 14),
+          style: TextStyle(color: NexoraColors.textSecondary, fontSize: 14.sp),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: 24.h),
 
         // OTP Input
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: List.generate(6, (index) {
             return SizedBox(
-              width: 45,
-              height: 55,
+              width: 45.w,
+              height: 55.h,
               child: Container(
                 decoration: BoxDecoration(
                   color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                   border: Border.all(
                     color: otpControllers[index].text.isNotEmpty
                         ? NexoraColors.primaryPurple
                         : NexoraColors.glassBorder,
-                    width: otpControllers[index].text.isNotEmpty ? 2 : 1,
+                    width: otpControllers[index].text.isNotEmpty ? 2.w : 1.w,
                   ),
                 ),
                 child: TextField(
@@ -384,13 +382,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
                   maxLength: 1,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: NexoraColors.textPrimary,
-                    fontSize: 22,
+                    fontSize: 22.sp,
                     fontWeight: FontWeight.bold,
                   ),
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     counterText: '',
                     border: InputBorder.none,
                   ),
@@ -402,17 +400,14 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
 
         if (_errorMessage != null) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: 12.h),
           Text(
             _errorMessage!,
-            style: const TextStyle(
-              color: NexoraColors.romanticPink,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: NexoraColors.romanticPink, fontSize: 12.sp),
           ),
         ],
 
-        const SizedBox(height: 16),
+        SizedBox(height: 16.h),
 
         // Resend OTP
         Row(
@@ -420,7 +415,7 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             Text(
               "Didn't receive code? ",
-              style: TextStyle(color: NexoraColors.textMuted, fontSize: 13),
+              style: TextStyle(color: NexoraColors.textMuted, fontSize: 13.sp),
             ),
             GestureDetector(
               onTap: () {
@@ -429,11 +424,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 }
                 _sendOtp();
               },
-              child: const Text(
+              child: Text(
                 'Resend',
                 style: TextStyle(
                   color: NexoraColors.primaryPurple,
-                  fontSize: 13,
+                  fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -463,27 +458,27 @@ class _LoginScreenState extends State<LoginScreen> {
       child: GestureDetector(
         onTap: isLoading ? null : onPressed,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: EdgeInsets.symmetric(vertical: 16.h),
           decoration: BoxDecoration(
             gradient: NexoraGradients.primaryButton,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16.r),
             boxShadow: [NexoraShadows.purpleGlow],
           ),
           child: Center(
             child: isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
+                ? SizedBox(
+                    width: 24.r,
+                    height: 24.r,
+                    child: const CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2.5,
                     ),
                   )
                 : Text(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

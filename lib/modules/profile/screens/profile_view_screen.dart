@@ -1,38 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../connections/repositories/connection_service.dart';
 import '../../chat/screens/chat_detail_screen.dart';
+import '../models/profile_model.dart';
 
 /// Profile View Screen - View another user's profile with message option
 class ProfileViewScreen extends StatefulWidget {
-  final String userId;
-  final String name;
-  final String avatar;
-  final String bio;
-  final String year;
-  final String major;
-  final List<String> interests;
-  final String? instagram;
-  final String? spotify;
-  final String? lookingFor;
-  final bool isOnline;
+  final ProfileModel profile;
 
-  const ProfileViewScreen({
-    required this.userId,
-    required this.name,
-    required this.avatar,
-    this.bio = '',
-    this.year = '',
-    this.major = '',
-    this.interests = const [],
-    this.instagram,
-    this.spotify,
-    this.lookingFor,
-    this.isOnline = false,
-    super.key,
-  });
+  const ProfileViewScreen({required this.profile, super.key});
 
   @override
   State<ProfileViewScreen> createState() => _ProfileViewScreenState();
@@ -97,7 +76,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   void _openChat() {
     Get.to(
-      () => ChatDetailScreen(name: widget.name, avatar: widget.avatar),
+      () => ChatDetailScreen(
+        name: widget.profile.name,
+        avatar: widget.profile.avatar,
+        participantId: widget.profile.id,
+      ),
       transition: Transition.rightToLeftWithFade,
       duration: const Duration(milliseconds: 300),
     );
@@ -111,13 +94,13 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
     if (_isLiked) {
       Get.snackbar(
         'Liked! 💜',
-        'You liked ${widget.name}\'s profile',
+        'You liked ${widget.profile.name}\'s profile',
         backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
         duration: const Duration(seconds: 2),
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
+        margin: EdgeInsets.all(16.w),
+        borderRadius: 12.r,
         icon: const Icon(Icons.favorite, color: Colors.white),
       );
     }
@@ -135,9 +118,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
               NexoraColors.midnightDark.withOpacity(0.98),
             ],
           ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
           border: Border.all(
             color: NexoraColors.primaryPurple.withOpacity(0.3),
+            width: 1.w,
           ),
         ),
         child: SafeArea(
@@ -145,12 +129,12 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
+                margin: EdgeInsets.only(top: 12.h),
+                width: 40.w,
+                height: 4.h,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(2.r),
                 ),
               ),
               const SizedBox(height: 20),
@@ -187,7 +171,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                   _showReportDialog();
                 },
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20.h),
             ],
           ),
         ),
@@ -203,18 +187,18 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
   }) {
     return ListTile(
       leading: Container(
-        padding: const EdgeInsets.all(10),
+        padding: EdgeInsets.all(10.r),
         decoration: BoxDecoration(
           color: color.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12.r),
         ),
-        child: Icon(icon, color: color, size: 22),
+        child: Icon(icon, color: color, size: 22.r),
       ),
       title: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           color: NexoraColors.textPrimary,
-          fontSize: 16,
+          fontSize: 16.sp,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -227,40 +211,40 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       AlertDialog(
         backgroundColor: Colors.transparent,
         content: GlassContainer(
-          borderRadius: 24,
-          padding: const EdgeInsets.all(24),
+          borderRadius: 24.r,
+          padding: EdgeInsets.all(24.w),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16.r),
                 decoration: BoxDecoration(
                   color: NexoraColors.error.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.report,
                   color: NexoraColors.error,
-                  size: 40,
+                  size: 40.r,
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text(
+              SizedBox(height: 20.h),
+              Text(
                 'Report Profile',
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 22.sp,
                   fontWeight: FontWeight.bold,
                   color: NexoraColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
               ...[
                 'Inappropriate content',
                 'Fake profile',
                 'Harassment',
                 'Spam',
               ].map((reason) => _buildReportOption(reason)),
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
@@ -291,16 +275,16 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       },
       child: Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        margin: EdgeInsets.only(bottom: 8.h),
+        padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
         decoration: BoxDecoration(
           color: NexoraColors.cardBackground,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: NexoraColors.cardBorder),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
         ),
         child: Text(
           reason,
-          style: const TextStyle(color: NexoraColors.textPrimary, fontSize: 15),
+          style: TextStyle(color: NexoraColors.textPrimary, fontSize: 15.sp),
         ),
       ),
     );
@@ -314,11 +298,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         children: [
           // Background gradients
           Positioned(
-            top: -100,
-            right: -100,
+            top: -100.h,
+            right: -100.w,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 300.r,
+              height: 300.r,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -331,11 +315,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
             ),
           ),
           Positioned(
-            bottom: 150,
-            left: -80,
+            bottom: 150.h,
+            left: -80.w,
             child: Container(
-              width: 250,
-              height: 250,
+              width: 250.r,
+              height: 250.r,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -363,47 +347,46 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                       position: _slideAnimation,
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.symmetric(horizontal: 20.w),
                         child: Column(
                           children: [
-                            const SizedBox(height: 20),
+                            SizedBox(height: 20.h),
 
                             // Profile Header
                             _buildProfileHeader(),
 
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24.h),
 
                             // Bio Section
-                            if (widget.bio.isNotEmpty) _buildBioSection(),
+                            if (widget.profile.bio.isNotEmpty)
+                              _buildBioSection(),
 
-                            const SizedBox(height: 20),
+                            SizedBox(height: 20.h),
 
                             // Spotify Anthem Section
                             _buildSpotifySection(),
 
-                            const SizedBox(height: 20),
+                            SizedBox(height: 20.h),
 
                             // Interests Section
-                            if (widget.interests.isNotEmpty)
+                            if (widget.profile.interests.isNotEmpty)
                               _buildInterestsSection(),
 
-                            const SizedBox(height: 20),
+                            SizedBox(height: 20.h),
 
                             // Looking For Section
-                            if (widget.lookingFor != null &&
-                                widget.lookingFor!.isNotEmpty)
+                            if (widget.profile.lookingFor != null &&
+                                widget.profile.lookingFor!.isNotEmpty)
                               _buildLookingForSection(),
 
-                            const SizedBox(height: 20),
+                            SizedBox(height: 20.h),
 
                             // Social Links
-                            if (widget.instagram != null ||
-                                widget.spotify != null)
+                            if (widget.profile.instagram != null ||
+                                widget.profile.spotify != null)
                               _buildSocialLinks(),
 
-                            const SizedBox(
-                              height: 100,
-                            ), // Space for bottom buttons
+                            SizedBox(height: 100.h), // Space for bottom buttons
                           ],
                         ),
                       ),
@@ -428,31 +411,31 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Get.back(),
             icon: Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(8.r),
               decoration: BoxDecoration(
                 color: NexoraColors.glassBackground,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: NexoraColors.glassBorder),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: NexoraColors.glassBorder, width: 1.w),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back_ios_new,
                 color: NexoraColors.textPrimary,
-                size: 18,
+                size: 18.r,
               ),
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
               'Profile',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 18.sp,
                 fontWeight: FontWeight.w600,
                 color: NexoraColors.textPrimary,
               ),
@@ -461,16 +444,16 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           IconButton(
             onPressed: _showMoreOptions,
             icon: Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(8.r),
               decoration: BoxDecoration(
                 color: NexoraColors.glassBackground,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: NexoraColors.glassBorder),
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: NexoraColors.glassBorder, width: 1.w),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.more_vert,
                 color: NexoraColors.textPrimary,
-                size: 18,
+                size: 18.r,
               ),
             ),
           ),
@@ -488,23 +471,23 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           children: [
             // Glow effect
             Container(
-              width: 145,
-              height: 145,
+              width: 145.r,
+              height: 145.r,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: NexoraColors.primaryPurple.withOpacity(0.4),
-                    blurRadius: 35,
-                    spreadRadius: 8,
+                    blurRadius: 35.r,
+                    spreadRadius: 8.r,
                   ),
                 ],
               ),
             ),
             // Avatar
             Container(
-              width: 130,
-              height: 130,
+              width: 130.r,
+              height: 130.r,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -517,21 +500,21 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: NexoraColors.primaryPurple.withOpacity(0.6),
-                  width: 3,
+                  width: 3.w,
                 ),
               ),
               child: ClipOval(
-                child: widget.avatar.startsWith('http')
+                child: widget.profile.avatar.startsWith('http')
                     ? Image.network(
-                        widget.avatar,
+                        widget.profile.avatar,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(
-                            widget.name.isNotEmpty
-                                ? widget.name[0].toUpperCase()
+                            widget.profile.name.isNotEmpty
+                                ? widget.profile.name[0].toUpperCase()
                                 : '?',
-                            style: const TextStyle(
-                              fontSize: 50,
+                            style: TextStyle(
+                              fontSize: 50.sp,
                               color: NexoraColors.textPrimary,
                               fontWeight: FontWeight.bold,
                             ),
@@ -540,11 +523,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                       )
                     : Center(
                         child: Text(
-                          widget.name.isNotEmpty
-                              ? widget.name[0].toUpperCase()
+                          widget.profile.name.isNotEmpty
+                              ? widget.profile.name[0].toUpperCase()
                               : '?',
-                          style: const TextStyle(
-                            fontSize: 50,
+                          style: TextStyle(
+                            fontSize: 50.sp,
                             color: NexoraColors.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
@@ -553,24 +536,24 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
               ),
             ),
             // Online indicator
-            if (widget.isOnline)
+            if (widget.profile.isOnline)
               Positioned(
-                bottom: 8,
-                right: 8,
+                bottom: 8.h,
+                right: 8.w,
                 child: Container(
-                  width: 24,
-                  height: 24,
+                  width: 24.r,
+                  height: 24.r,
                   decoration: BoxDecoration(
                     color: NexoraColors.online,
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: NexoraColors.midnightDark,
-                      width: 3,
+                      width: 3.w,
                     ),
                     boxShadow: [
                       BoxShadow(
                         color: NexoraColors.online.withOpacity(0.5),
-                        blurRadius: 8,
+                        blurRadius: 8.r,
                       ),
                     ],
                   ),
@@ -579,28 +562,28 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           ],
         ),
 
-        const SizedBox(height: 20),
+        SizedBox(height: 20.h),
 
         // Name
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              widget.name,
-              style: const TextStyle(
-                fontSize: 28,
+              widget.profile.name,
+              style: TextStyle(
+                fontSize: 28.sp,
                 fontWeight: FontWeight.bold,
                 color: NexoraColors.textPrimary,
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.all(4),
+              padding: EdgeInsets.all(4.r),
               decoration: BoxDecoration(
                 gradient: NexoraGradients.cyanAccent,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check, color: Colors.white, size: 12),
+              child: Icon(Icons.check, color: Colors.white, size: 12.r),
             ),
           ],
         ),
@@ -608,9 +591,9 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         const SizedBox(height: 8),
 
         // Year & Major
-        if (widget.year.isNotEmpty || widget.major.isNotEmpty)
+        if (widget.profile.year.isNotEmpty || widget.profile.major.isNotEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -618,45 +601,46 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                   NexoraColors.romanticPink.withOpacity(0.1),
                 ],
               ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(20.r),
               border: Border.all(
                 color: NexoraColors.primaryPurple.withOpacity(0.3),
+                width: 1.w,
               ),
             ),
             child: Text(
               [
-                widget.year,
-                widget.major,
+                widget.profile.year,
+                widget.profile.major,
               ].where((s) => s.isNotEmpty).join(' • '),
-              style: const TextStyle(
+              style: TextStyle(
                 color: NexoraColors.textPrimary,
-                fontSize: 14,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
 
         // Online status
-        if (widget.isOnline)
+        if (widget.profile.isOnline)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: EdgeInsets.only(top: 8.h),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 8.r,
+                  height: 8.r,
                   decoration: BoxDecoration(
                     color: NexoraColors.online,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6.w),
                 Text(
                   'Online now',
                   style: TextStyle(
                     color: NexoraColors.online,
-                    fontSize: 13,
+                    fontSize: 13.sp,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -672,15 +656,15 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('About', Icons.person_outline),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         GlassContainer(
-          borderRadius: 20,
-          padding: const EdgeInsets.all(16),
+          borderRadius: 20.r,
+          padding: EdgeInsets.all(16.w),
           child: Text(
-            widget.bio,
-            style: const TextStyle(
+            widget.profile.bio,
+            style: TextStyle(
               color: NexoraColors.textPrimary,
-              fontSize: 15,
+              fontSize: 15.sp,
               height: 1.5,
             ),
           ),
@@ -702,10 +686,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('On Repeat', Icons.music_note_rounded),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20.r),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -715,17 +699,20 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                 NexoraColors.primaryPurple.withOpacity(0.08),
               ],
             ),
-            border: Border.all(color: const Color(0xFF1DB954).withOpacity(0.2)),
+            border: Border.all(
+              color: const Color(0xFF1DB954).withOpacity(0.2),
+              width: 1.w,
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF1DB954).withOpacity(0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
+                blurRadius: 20.r,
+                offset: Offset(0, 4.h),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20.r),
             child: Stack(
               children: [
                 // Background blur effect
@@ -746,14 +733,14 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                 ),
                 // Content
                 Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: EdgeInsets.all(14.r),
                   child: Row(
                     children: [
                       // Album art with glass frame
                       Container(
-                        padding: const EdgeInsets.all(3),
+                        padding: EdgeInsets.all(3.r),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(14.r),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -767,13 +754,13 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                           alignment: Alignment.center,
                           children: [
                             Container(
-                              width: 52,
-                              height: 52,
+                              width: 52.r,
+                              height: 52.r,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(11),
+                                borderRadius: BorderRadius.circular(11.r),
                               ),
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(11),
+                                borderRadius: BorderRadius.circular(11.r),
                                 child: Image.network(
                                   spotifyAnthem['albumArt']!,
                                   fit: BoxFit.cover,
@@ -787,10 +774,10 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                                           ],
                                         ),
                                       ),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.music_note_rounded,
                                         color: Colors.white,
-                                        size: 24,
+                                        size: 24.r,
                                       ),
                                     );
                                   },
@@ -799,26 +786,26 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                             ),
                             // Frosted play button
                             Container(
-                              width: 26,
-                              height: 26,
+                              width: 26.r,
+                              height: 26.r,
                               decoration: BoxDecoration(
                                 color: Colors.black.withOpacity(0.4),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: Colors.white.withOpacity(0.3),
-                                  width: 1.5,
+                                  width: 1.5.w,
                                 ),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.play_arrow_rounded,
                                 color: Colors.white,
-                                size: 16,
+                                size: 16.r,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      SizedBox(width: 14.w),
                       // Song info
                       Expanded(
                         child: Column(
@@ -826,38 +813,38 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                           children: [
                             Text(
                               spotifyAnthem['title']!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: NexoraColors.textPrimary,
-                                fontSize: 15,
+                                fontSize: 15.sp,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.2,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4.h),
                             Row(
                               children: [
                                 Container(
-                                  width: 14,
-                                  height: 14,
+                                  width: 14.r,
+                                  height: 14.r,
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF1DB954),
-                                    borderRadius: BorderRadius.circular(3),
+                                    borderRadius: BorderRadius.circular(3.r),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.music_note,
                                     color: Colors.white,
-                                    size: 10,
+                                    size: 10.r,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                SizedBox(width: 6.w),
                                 Expanded(
                                   child: Text(
                                     spotifyAnthem['artist']!,
                                     style: TextStyle(
                                       color: NexoraColors.textMuted,
-                                      fontSize: 13,
+                                      fontSize: 13.sp,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -870,24 +857,25 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                       ),
                       // Animated bars indicator
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.all(8.r),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(10.r),
                           border: Border.all(
                             color: Colors.white.withOpacity(0.1),
+                            width: 1.w,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _buildMusicBar(8),
-                            const SizedBox(width: 2),
-                            _buildMusicBar(14),
-                            const SizedBox(width: 2),
-                            _buildMusicBar(10),
-                            const SizedBox(width: 2),
-                            _buildMusicBar(16),
+                            _buildMusicBar(8.h),
+                            SizedBox(width: 2.w),
+                            _buildMusicBar(14.h),
+                            SizedBox(width: 2.w),
+                            _buildMusicBar(10.h),
+                            SizedBox(width: 2.w),
+                            _buildMusicBar(16.h),
                           ],
                         ),
                       ),
@@ -904,11 +892,11 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   Widget _buildMusicBar(double height) {
     return Container(
-      width: 3,
+      width: 3.w,
       height: height,
       decoration: BoxDecoration(
         color: const Color(0xFF1DB954),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(2.r),
       ),
     );
   }
@@ -918,14 +906,14 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Interests', Icons.favorite_outline),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: widget.interests.map((interest) {
+          spacing: 10.w,
+          runSpacing: 10.h,
+          children: widget.profile.interests.map((interest) {
             final emoji = interestEmojis[interest] ?? '✨';
             return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -933,19 +921,19 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                     NexoraColors.primaryPurple.withOpacity(0.1),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: NexoraColors.glassBorder),
+                borderRadius: BorderRadius.circular(20.r),
+                border: Border.all(color: NexoraColors.glassBorder, width: 1.w),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 6),
+                  Text(emoji, style: TextStyle(fontSize: 16.sp)),
+                  SizedBox(width: 6.w),
                   Text(
                     interest,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: NexoraColors.textPrimary,
-                      fontSize: 13,
+                      fontSize: 13.sp,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -963,31 +951,27 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Looking For', Icons.search_outlined),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         GlassContainer(
-          borderRadius: 20,
-          padding: const EdgeInsets.all(16),
+          borderRadius: 20.r,
+          padding: EdgeInsets.all(16.w),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(10.r),
                 decoration: BoxDecoration(
                   gradient: NexoraGradients.romanticGlow,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
-                child: const Icon(
-                  Icons.favorite,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: Icon(Icons.favorite, color: Colors.white, size: 20.r),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14.w),
               Expanded(
                 child: Text(
-                  widget.lookingFor!,
-                  style: const TextStyle(
+                  widget.profile.lookingFor!,
+                  style: TextStyle(
                     color: NexoraColors.textPrimary,
-                    fontSize: 15,
+                    fontSize: 15.sp,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1004,29 +988,31 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Socials', Icons.link),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         GlassContainer(
-          borderRadius: 20,
-          padding: const EdgeInsets.all(16),
+          borderRadius: 20.r,
+          padding: EdgeInsets.all(16.w),
           child: Column(
             children: [
-              if (widget.instagram != null && widget.instagram!.isNotEmpty)
+              if (widget.profile.instagram != null &&
+                  widget.profile.instagram!.isNotEmpty)
                 _buildSocialRow(
                   icon: Icons.camera_alt_outlined,
                   label: 'Instagram',
-                  value: '@${widget.instagram}',
+                  value: '@${widget.profile.instagram}',
                   color: const Color(0xFFE4405F),
                 ),
-              if (widget.instagram != null &&
-                  widget.instagram!.isNotEmpty &&
-                  widget.spotify != null &&
-                  widget.spotify!.isNotEmpty)
-                const SizedBox(height: 12),
-              if (widget.spotify != null && widget.spotify!.isNotEmpty)
+              if (widget.profile.instagram != null &&
+                  widget.profile.instagram!.isNotEmpty &&
+                  widget.profile.spotify != null &&
+                  widget.profile.spotify!.isNotEmpty)
+                SizedBox(height: 12.h),
+              if (widget.profile.spotify != null &&
+                  widget.profile.spotify!.isNotEmpty)
                 _buildSocialRow(
                   icon: Icons.music_note,
                   label: 'Spotify',
-                  value: widget.spotify!,
+                  value: widget.profile.spotify!,
                   color: const Color(0xFF1DB954),
                 ),
             ],
@@ -1045,26 +1031,26 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(8.r),
           decoration: BoxDecoration(
             color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
           ),
-          child: Icon(icon, color: color, size: 20),
+          child: Icon(icon, color: color, size: 20.r),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12.w),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: TextStyle(color: NexoraColors.textMuted, fontSize: 12),
+              style: TextStyle(color: NexoraColors.textMuted, fontSize: 12.sp),
             ),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: NexoraColors.textPrimary,
-                fontSize: 14,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1078,19 +1064,19 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(8.r),
           decoration: BoxDecoration(
             color: NexoraColors.primaryPurple.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
           ),
-          child: Icon(icon, color: NexoraColors.primaryPurple, size: 18),
+          child: Icon(icon, color: NexoraColors.primaryPurple, size: 18.r),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: 10.w),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: NexoraColors.textPrimary,
-            fontSize: 18,
+            fontSize: 18.sp,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1100,7 +1086,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   Widget _buildBottomActions() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 24.h),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -1120,23 +1106,23 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
               onTap: _toggleLike,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 60,
-                height: 60,
+                width: 60.r,
+                height: 60.r,
                 decoration: BoxDecoration(
                   gradient: _isLiked ? NexoraGradients.romanticGlow : null,
                   color: _isLiked ? null : NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(18.r),
                   border: Border.all(
                     color: _isLiked
                         ? Colors.transparent
                         : NexoraColors.romanticPink.withOpacity(0.5),
-                    width: 2,
+                    width: 2.w,
                   ),
                   boxShadow: _isLiked
                       ? [
                           BoxShadow(
                             color: NexoraColors.romanticPink.withOpacity(0.4),
-                            blurRadius: 15,
+                            blurRadius: 15.r,
                           ),
                         ]
                       : null,
@@ -1144,50 +1130,55 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                 child: Icon(
                   _isLiked ? Icons.favorite : Icons.favorite_border,
                   color: _isLiked ? Colors.white : NexoraColors.romanticPink,
-                  size: 28,
+                  size: 28.r,
                 ),
               ),
             ),
 
-            const SizedBox(width: 12),
+            SizedBox(width: 12.w),
 
             // Connect Button
             _buildConnectionButton(),
 
-            const SizedBox(width: 12),
+            SizedBox(width: 12.w),
 
             // Message Button
             Expanded(
               child: GestureDetector(
                 onTap: _openChat,
                 child: Container(
-                  height: 60,
+                  height: 60.h,
                   decoration: BoxDecoration(
                     gradient: NexoraGradients.primaryButton,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(18.r),
                     boxShadow: [
                       BoxShadow(
                         color: NexoraColors.primaryPurple.withOpacity(0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        blurRadius: 20.r,
+                        offset: Offset(0, 8.h),
                       ),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         Icons.chat_bubble_outline,
                         color: Colors.white,
-                        size: 22,
+                        size: 22.r,
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Send Message',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      SizedBox(width: 10.w),
+                      Flexible(
+                        child: Text(
+                          'Send Message',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          softWrap: false,
                         ),
                       ),
                     ],
@@ -1203,7 +1194,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   Widget _buildConnectionButton() {
     return Obx(() {
-      final status = _connectionService.getStatus(widget.userId);
+      final status = _connectionService.getStatus(widget.profile.id);
 
       IconData icon;
       String label;
@@ -1230,16 +1221,16 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           borderColor = NexoraColors.textMuted.withOpacity(0.3);
           contentColor = NexoraColors.textSecondary;
           onTap = () {
-            _connectionService.cancelRequest(widget.userId);
+            _connectionService.cancelRequest(widget.profile.id);
             Get.snackbar(
               'Request Cancelled',
-              'Connection request to ${widget.name} cancelled',
+              'Connection request to ${widget.profile.name} cancelled',
               backgroundColor: NexoraColors.glassBackground,
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
               duration: const Duration(seconds: 2),
-              margin: const EdgeInsets.all(16),
-              borderRadius: 12,
+              margin: EdgeInsets.all(16.w),
+              borderRadius: 12.r,
             );
           };
           break;
@@ -1250,19 +1241,22 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           borderColor = NexoraColors.success.withOpacity(0.3);
           contentColor = NexoraColors.success;
           onTap = () {
-            _connectionService.acceptRequest(widget.userId);
+            _connectionService.acceptRequest(widget.profile.id);
             Get.snackbar(
               'Connected!',
-              'You are now connected with ${widget.name}',
+              'You are now connected with ${widget.profile.name}',
               backgroundColor: NexoraColors.success.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
               duration: const Duration(seconds: 2),
-              margin: const EdgeInsets.all(16),
-              borderRadius: 12,
-              icon: const Padding(
-                padding: EdgeInsets.only(left: 12),
-                child: Icon(Icons.check_circle_rounded, color: Colors.white),
+              margin: EdgeInsets.all(16.w),
+              borderRadius: 12.r,
+              icon: Padding(
+                padding: EdgeInsets.only(left: 12.w),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                ),
               ),
             );
           };
@@ -1275,24 +1269,27 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           contentColor = NexoraColors.accentCyan;
           onTap = () {
             _connectionService.sendRequest(
-              userId: widget.userId,
-              name: widget.name,
-              avatar: widget.avatar,
-              major: widget.major,
-              year: widget.year,
+              userId: widget.profile.id,
+              name: widget.profile.name,
+              avatar: widget.profile.avatar,
+              major: widget.profile.major,
+              year: widget.profile.year,
             );
             Get.snackbar(
               'Connection Request Sent',
-              'You sent a connection request to ${widget.name}',
+              'You sent a connection request to ${widget.profile.name}',
               backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
               duration: const Duration(seconds: 2),
-              margin: const EdgeInsets.all(16),
-              borderRadius: 12,
-              icon: const Padding(
-                padding: EdgeInsets.only(left: 12),
-                child: Icon(Icons.person_add_rounded, color: Colors.white),
+              margin: EdgeInsets.all(16.w),
+              borderRadius: 12.r,
+              icon: Padding(
+                padding: EdgeInsets.only(left: 12.w),
+                child: const Icon(
+                  Icons.person_add_rounded,
+                  color: Colors.white,
+                ),
               ),
             );
           };
@@ -1301,24 +1298,30 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       return GestureDetector(
         onTap: onTap,
         child: Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          height: 60.h,
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(18.r),
+            border: Border.all(color: borderColor, width: 1.w),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: contentColor, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: contentColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Icon(icon, color: contentColor, size: 22.r),
+              SizedBox(width: 8.w),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: contentColor,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  softWrap: false,
                 ),
               ),
             ],
@@ -1332,13 +1335,15 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
     Get.dialog(
       AlertDialog(
         backgroundColor: NexoraColors.midnightDark,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16.r),
+        ),
         title: const Text(
           'Remove Connection',
           style: TextStyle(color: NexoraColors.textPrimary),
         ),
         content: Text(
-          'Are you sure you want to remove ${widget.name} from your connections?',
+          'Are you sure you want to remove ${widget.profile.name} from your connections?',
           style: const TextStyle(color: NexoraColors.textSecondary),
         ),
         actions: [
@@ -1351,17 +1356,17 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           ),
           TextButton(
             onPressed: () {
-              _connectionService.removeConnection(widget.userId);
+              _connectionService.removeConnection(widget.profile.id);
               Get.back();
               Get.snackbar(
                 'Connection Removed',
-                '${widget.name} has been removed from your connections',
+                '${widget.profile.name} has been removed from your connections',
                 backgroundColor: NexoraColors.glassBackground,
                 colorText: Colors.white,
                 snackPosition: SnackPosition.TOP,
                 duration: const Duration(seconds: 2),
-                margin: const EdgeInsets.all(16),
-                borderRadius: 12,
+                margin: EdgeInsets.all(16.w),
+                borderRadius: 12.r,
               );
             },
             child: const Text(

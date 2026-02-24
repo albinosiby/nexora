@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../theme/nexora_theme.dart';
 
 /// Solid container widget - previously used glassmorphism, now uses solid styling
@@ -24,8 +25,8 @@ class GlassContainer extends StatelessWidget {
         padding: padding,
         decoration: BoxDecoration(
           color: NexoraColors.cardBackground,
-          borderRadius: BorderRadius.circular(borderRadius),
-          border: Border.all(color: NexoraColors.cardBorder),
+          borderRadius: BorderRadius.circular(borderRadius.r),
+          border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
         ),
         child: child,
       ),

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../../../core/theme/nexora_theme.dart';
-import '../../../core/services/dummy_database.dart';
+import '../repositories/chat_repository.dart';
+import '../models/chat_model.dart';
+import '../../profile/repositories/user_repository.dart';
 import 'chat_detail_screen.dart';
+import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -22,44 +26,13 @@ class _ChatListScreenState extends State<ChatListScreen>
   late AnimationController _searchAnimationController;
   late Animation<double> _searchGlowAnimation;
 
-  final DummyDatabase _db = DummyDatabase.instance;
-
-  List<Map<String, dynamic>> get chats {
-    final currentUserId = _db.currentUser.value.id;
-    return _db.chats.map((chat) {
-      // Get the other participant
-      final otherUserId = chat.participantIds.firstWhere(
-        (id) => id != currentUserId,
-        orElse: () => chat.participantIds.first,
-      );
-      final otherUser = _db.getUserById(otherUserId);
-      
-      return {
-        'chatId': chat.id,
-        'userId': otherUserId,
-        'name': otherUser?.displayName ?? 'unknown',
-        'lastMessage': chat.lastMessage,
-        'time': _formatTime(chat.lastMessageTime),
-        'unread': chat.unreadCount,
-        'image': otherUser?.avatar ?? '',
-        'online': otherUser?.isOnline ?? false,
-        'typing': chat.isTyping,
-        'pinned': false,
-      };
-    }).toList()
-      ..sort((a, b) {
-        // Sort by pinned first, then by time
-        if ((a['pinned'] as bool) != (b['pinned'] as bool)) {
-          return (a['pinned'] as bool) ? -1 : 1;
-        }
-        return 0;
-      });
-  }
+  final ChatRepository _chatRepo = ChatRepository.instance;
+  final UserRepository _userRepo = UserRepository.instance;
 
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time);
-    
+
     if (diff.inMinutes < 60) {
       return '${diff.inMinutes}m';
     } else if (diff.inHours < 24) {
@@ -109,372 +82,353 @@ class _ChatListScreenState extends State<ChatListScreen>
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get filteredChats {
-    if (_searchQuery.isEmpty) return chats;
-    return chats.where((chat) {
-      final name = (chat['name'] as String).toLowerCase();
-      final message = (chat['lastMessage'] as String).toLowerCase();
-      return name.contains(_searchQuery.toLowerCase()) ||
-          message.contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final onlineFriends = chats.where((c) => c['online'] == true).toList();
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: StreamBuilder<List<ChatModel>>(
+          stream: _chatRepo.getConversations(),
+          builder: (context, snapshot) {
+            final chats = snapshot.data ?? [];
+            final filteredChats = _searchQuery.isEmpty
+                ? chats
+                : chats
+                      .where(
+                        (c) => c.lastMessage.toLowerCase().contains(
+                          _searchQuery.toLowerCase(),
+                        ),
+                      )
+                      .toList();
+
+            // onlineFriendsCount removed as it's not currently used in the main UI
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: 20.h),
+                // Header
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.w),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [
-                            NexoraColors.textPrimary,
-                            NexoraColors.primaryPurple.withOpacity(0.9),
-                          ],
-                        ).createShader(bounds),
-                        child: const Text(
-                          "Messages",
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ShaderMask(
+                            shaderCallback: (bounds) => LinearGradient(
+                              colors: [
+                                NexoraColors.textPrimary,
+                                NexoraColors.primaryPurple.withOpacity(0.9),
+                              ],
+                            ).createShader(bounds),
+                            child: Text(
+                              "Messages",
+                              style: TextStyle(
+                                fontSize: 28.sp,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8.r,
+                                height: 8.r,
+                                decoration: BoxDecoration(
+                                  color: NexoraColors.online,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: NexoraColors.online.withOpacity(
+                                        0.5,
+                                      ),
+                                      blurRadius: 6.r,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(width: 6.w),
+                              Text(
+                                "Real-time Chat Active",
+                                style: TextStyle(
+                                  color: NexoraColors.textMuted,
+                                  fontSize: 13.sp,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20.h),
+
+                // Search bar
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.w),
+                  child: AnimatedBuilder(
+                    animation: _searchGlowAnimation,
+                    builder: (context, child) {
+                      return Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20.r),
+                          boxShadow: _isSearchFocused || _searchQuery.isNotEmpty
+                              ? [
+                                  BoxShadow(
+                                    color: NexoraColors.primaryPurple
+                                        .withOpacity(
+                                          0.3 * _searchGlowAnimation.value,
+                                        ),
+                                    blurRadius: 20.r,
+                                    spreadRadius: 2.r,
+                                  ),
+                                  BoxShadow(
+                                    color: NexoraColors.accentCyan.withOpacity(
+                                      0.15 * _searchGlowAnimation.value,
+                                    ),
+                                    blurRadius: 30.r,
+                                    spreadRadius: 0,
+                                    offset: Offset(0, 4.h),
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20.r),
+                            color: _isSearchFocused
+                                ? NexoraColors.cardSurface
+                                : NexoraColors.cardBackground,
+                            border: Border.all(
+                              color: _isSearchFocused
+                                  ? NexoraColors.primaryPurple.withOpacity(0.5)
+                                  : NexoraColors.cardBorder,
+                              width: _isSearchFocused ? 1.5.w : 1.w,
+                            ),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16.w,
+                            vertical: 4.h,
+                          ),
+                          child: Row(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: EdgeInsets.all(8.r),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: _isSearchFocused
+                                      ? LinearGradient(
+                                          colors: [
+                                            NexoraColors.primaryPurple
+                                                .withOpacity(0.3),
+                                            NexoraColors.accentCyan.withOpacity(
+                                              0.2,
+                                            ),
+                                          ],
+                                        )
+                                      : null,
+                                ),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: Icon(
+                                    _searchQuery.isNotEmpty
+                                        ? Icons.manage_search_rounded
+                                        : Icons.search_rounded,
+                                    key: ValueKey(_searchQuery.isNotEmpty),
+                                    color: _isSearchFocused
+                                        ? NexoraColors.brightPurple
+                                        : NexoraColors.textMuted,
+                                    size: 22.r,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8.w),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  style: TextStyle(
+                                    color: NexoraColors.textPrimary,
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  cursorColor: NexoraColors.primaryPurple,
+                                  decoration: InputDecoration(
+                                    hintText: _isSearchFocused
+                                        ? 'Search by last message...'
+                                        : 'Search messages...',
+                                    hintStyle: TextStyle(
+                                      color: _isSearchFocused
+                                          ? NexoraColors.textMuted.withOpacity(
+                                              0.8,
+                                            )
+                                          : NexoraColors.textMuted,
+                                      fontSize: 15.sp,
+                                    ),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 12.h,
+                                    ),
+                                  ),
+                                  onChanged: (value) =>
+                                      setState(() => _searchQuery = value),
+                                ),
+                              ),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                child: _searchQuery.isNotEmpty
+                                    ? GestureDetector(
+                                        key: const ValueKey('clear'),
+                                        onTap: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
+                                        child: Container(
+                                          padding: EdgeInsets.all(6.r),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: NexoraColors.textMuted
+                                                .withOpacity(0.2),
+                                          ),
+                                          child: Icon(
+                                            Icons.close_rounded,
+                                            color: NexoraColors.textSecondary,
+                                            size: 16.r,
+                                          ),
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(
+                                        key: ValueKey('empty'),
+                                      ),
+                              ),
+                            ],
                           ),
                         ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Tabs
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.w),
+                  child: Container(
+                    height: 44.h,
+                    decoration: BoxDecoration(
+                      color: NexoraColors.glassBackground,
+                      borderRadius: BorderRadius.circular(14.r),
+                      border: Border.all(color: NexoraColors.glassBorder),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12.r),
+                        gradient: NexoraGradients.primaryButton,
+                        boxShadow: [
+                          BoxShadow(
+                            color: NexoraColors.primaryPurple.withOpacity(0.3),
+                            blurRadius: 8.r,
+                            offset: Offset(0, 2.h),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: NexoraColors.online,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: NexoraColors.online.withOpacity(0.5),
-                                  blurRadius: 6,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: NexoraColors.textMuted,
+                      labelStyle: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      unselectedLabelStyle: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      padding: EdgeInsets.all(4.r),
+                      tabs: [
+                        const Tab(text: "All Chats"),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text("Unread"),
+                              if (chats.any(
+                                (c) =>
+                                    (c.unreadCounts[_chatRepo.currentUserId ??
+                                            ''] ??
+                                        0) >
+                                    0,
+                              )) ...[
+                                SizedBox(width: 6.w),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 6.w,
+                                    vertical: 2.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: NexoraColors.loveRed,
+                                    borderRadius: BorderRadius.circular(8.r),
+                                  ),
+                                  child: Text(
+                                    '${chats.where((c) => (c.unreadCounts[_chatRepo.currentUserId ?? ''] ?? 0) > 0).length}',
+                                    style: TextStyle(
+                                      fontSize: 10.sp,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            "${onlineFriends.length} friends online",
-                            style: TextStyle(
-                              color: NexoraColors.textMuted,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Online friends horizontal list
-            if (onlineFriends.isNotEmpty) ...[
-              SizedBox(
-                height: 90,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: onlineFriends.length,
-                  itemBuilder: (context, index) =>
-                      _buildOnlineFriendAvatar(onlineFriends[index]),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Search bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: AnimatedBuilder(
-                animation: _searchGlowAnimation,
-                builder: (context, child) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: _isSearchFocused || _searchQuery.isNotEmpty
-                          ? [
-                              BoxShadow(
-                                color: NexoraColors.primaryPurple.withOpacity(
-                                  0.3 * _searchGlowAnimation.value,
-                                ),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color: NexoraColors.accentCyan.withOpacity(
-                                  0.15 * _searchGlowAnimation.value,
-                                ),
-                                blurRadius: 30,
-                                spreadRadius: 0,
-                                offset: const Offset(0, 4),
-                              ),
-                            ]
-                          : [],
-                    ),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: _isSearchFocused
-                            ? NexoraColors.cardSurface
-                            : NexoraColors.cardBackground,
-                        border: Border.all(
-                          color: _isSearchFocused
-                              ? NexoraColors.primaryPurple.withOpacity(0.5)
-                              : NexoraColors.cardBorder,
-                          width: _isSearchFocused ? 1.5 : 1,
                         ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: _isSearchFocused
-                                  ? LinearGradient(
-                                      colors: [
-                                        NexoraColors.primaryPurple.withOpacity(
-                                          0.3,
-                                        ),
-                                        NexoraColors.accentCyan.withOpacity(
-                                          0.2,
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                            ),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                _searchQuery.isNotEmpty
-                                    ? Icons.manage_search_rounded
-                                    : Icons.search_rounded,
-                                key: ValueKey(_searchQuery.isNotEmpty),
-                                color: _isSearchFocused
-                                    ? NexoraColors.brightPurple
-                                    : NexoraColors.textMuted,
-                                size: 22,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _searchController,
-                              focusNode: _searchFocusNode,
-                              style: const TextStyle(
-                                color: NexoraColors.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                              ),
-                              cursorColor: NexoraColors.primaryPurple,
-                              decoration: InputDecoration(
-                                hintText: _isSearchFocused
-                                    ? 'Search by name or message...'
-                                    : 'Search messages...',
-                                hintStyle: TextStyle(
-                                  color: _isSearchFocused
-                                      ? NexoraColors.textMuted.withOpacity(0.8)
-                                      : NexoraColors.textMuted,
-                                  fontSize: 15,
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                              ),
-                              onChanged: (value) =>
-                                  setState(() => _searchQuery = value),
-                            ),
-                          ),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            transitionBuilder: (child, animation) {
-                              return ScaleTransition(
-                                scale: animation,
-                                child: FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: _searchQuery.isNotEmpty
-                                ? GestureDetector(
-                                    key: const ValueKey('clear'),
-                                    onTap: () {
-                                      _searchController.clear();
-                                      setState(() => _searchQuery = '');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: NexoraColors.textMuted
-                                            .withOpacity(0.2),
-                                      ),
-                                      child: const Icon(
-                                        Icons.close_rounded,
-                                        color: NexoraColors.textSecondary,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(key: ValueKey('empty')),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  );
-                },
-              ),
-            ),
-            // Search results count
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              child: _searchQuery.isNotEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 24, top: 8),
-                      child: Text(
-                        '${filteredChats.length} ${filteredChats.length == 1 ? 'result' : 'results'} found',
-                        style: TextStyle(
-                          color: NexoraColors.primaryPurple,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Chat list
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildChatList(filteredChats),
+                        _buildChatList(
+                          filteredChats
+                              .where(
+                                (c) =>
+                                    (c.unreadCounts[_chatRepo.currentUserId ??
+                                            ''] ??
+                                        0) >
+                                    0,
+                              )
+                              .toList(),
                         ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 16),
-
-            // Tabs
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: NexoraColors.glassBorder),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  dividerColor: Colors.transparent,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: NexoraGradients.primaryButton,
-                    boxShadow: [
-                      BoxShadow(
-                        color: NexoraColors.primaryPurple.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: NexoraColors.textMuted,
-                  labelStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  unselectedLabelStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  tabs: [
-                    const Tab(text: "All Chats"),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text("Unread"),
-                          if (chats
-                              .where((c) => (c['unread'] as int) > 0)
-                              .isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: NexoraColors.loveRed,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${chats.where((c) => (c['unread'] as int) > 0).length}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Chat list
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildChatList(filteredChats),
-                    _buildChatList(
-                      filteredChats
-                          .where((c) => (c['unread'] as int) > 0)
-                          .toList(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildChatList(List<Map<String, dynamic>> chatList) {
+  Widget _buildChatList(List<ChatModel> chatList) {
     if (chatList.isEmpty) {
       return _buildEmptyState('No messages found', Icons.chat_bubble_outline);
     }
@@ -486,356 +440,384 @@ class _ChatListScreenState extends State<ChatListScreen>
     );
   }
 
-  Widget _buildChatItem(Map<String, dynamic> chat, int index) {
-    final bool hasUnread = (chat['unread'] as int) > 0;
-    final bool isOnline = chat['online'] as bool;
-    final bool isTyping = chat['typing'] == true;
+  Widget _buildChatItem(ChatModel chat, int index) {
+    final currentUserId = _chatRepo.currentUserId;
+    final otherUserId = chat.participantIds.firstWhere(
+      (id) => id != currentUserId,
+      orElse: () => '',
+    );
+    final unreadCount = chat.unreadCounts[currentUserId ?? ''] ?? 0;
+    final hasUnread = unreadCount > 0;
+    final isTyping = chat.typingStatus[otherUserId] == true;
 
-    return TweenAnimationBuilder(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 300 + (index * 50)),
-      curve: Curves.easeOutCubic,
-      builder: (context, double value, child) {
-        return Transform.translate(
-          offset: Offset(30 * (1 - value), 0),
-          child: Opacity(
-            opacity: value,
-            child: GestureDetector(
-              onTap: () => Get.to(
-                () => ChatDetailScreen(
-                  name: chat['name'] as String,
-                  avatar: chat['image'] as String,
-                  chatId: chat['chatId'] as String?,
-                  participantId: chat['userId'] as String?,
-                ),
-              ),
-              onLongPress: () => _showChatOptions(chat),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: hasUnread
-                        ? NexoraColors.primaryPurple.withOpacity(0.08)
-                        : NexoraColors.glassBackground,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: hasUnread
-                          ? NexoraColors.primaryPurple.withOpacity(0.2)
-                          : NexoraColors.glassBorder,
+    return StreamBuilder<ProfileModel?>(
+      stream: _userRepo.getUserStream(otherUserId),
+      builder: (context, userSnapshot) {
+        final otherUser = userSnapshot.data;
+        final name = otherUser?.name ?? 'Loading...';
+        final avatar = otherUser?.avatar ?? '';
+        final isOnline = otherUser?.isOnline ?? false;
+
+        return TweenAnimationBuilder(
+          tween: Tween<double>(begin: 0, end: 1),
+          duration: Duration(milliseconds: 300 + (index * 50)),
+          curve: Curves.easeOutCubic,
+          builder: (context, double value, child) {
+            return Transform.translate(
+              offset: Offset(30 * (1 - value), 0),
+              child: Opacity(
+                opacity: value,
+                child: GestureDetector(
+                  onTap: () {
+                    _chatRepo.markAsRead(chat.id);
+                    Get.to(
+                      () => ChatDetailScreen(
+                        name: name,
+                        avatar: avatar,
+                        chatId: chat.id,
+                        participantId: otherUserId,
+                      ),
+                    );
+                  },
+                  onLongPress: () =>
+                      _showChatOptions(chat, name, avatar, isOnline),
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: 10.h),
+                    child: Container(
+                      padding: EdgeInsets.all(14.r),
+                      decoration: BoxDecoration(
+                        color: hasUnread
+                            ? NexoraColors.primaryPurple.withOpacity(0.08)
+                            : NexoraColors.glassBackground,
+                        borderRadius: BorderRadius.circular(18.r),
+                        border: Border.all(
+                          color: hasUnread
+                              ? NexoraColors.primaryPurple.withOpacity(0.2)
+                              : NexoraColors.glassBorder,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildAvatar(
+                            avatar,
+                            name,
+                            isOnline,
+                            hasUnread,
+                            otherUser,
+                          ),
+                          SizedBox(width: 14.w),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        name,
+                                        style: TextStyle(
+                                          fontWeight: hasUnread
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                          fontSize: 15.sp,
+                                          color: NexoraColors.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8.w),
+                                    Text(
+                                      _formatTime(chat.lastMessageTime),
+                                      style: TextStyle(
+                                        color: hasUnread
+                                            ? NexoraColors.primaryPurple
+                                            : NexoraColors.textMuted,
+                                        fontSize: 12.sp,
+                                        fontWeight: hasUnread
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 6.h),
+                                Row(
+                                  children: [
+                                    if (!hasUnread &&
+                                        !isTyping &&
+                                        chat.lastMessage.isNotEmpty) ...[
+                                      Icon(
+                                        Icons.done_all,
+                                        size: 16.r,
+                                        color: NexoraColors.accentCyan,
+                                      ),
+                                      SizedBox(width: 4.w),
+                                    ],
+                                    Expanded(
+                                      child: isTyping
+                                          ? _buildTypingIndicator()
+                                          : Text(
+                                              chat.lastMessage.isEmpty
+                                                  ? 'Start a conversation'
+                                                  : chat.lastMessage,
+                                              style: TextStyle(
+                                                color: hasUnread
+                                                    ? NexoraColors.textSecondary
+                                                    : NexoraColors.textMuted,
+                                                fontSize: 14.sp,
+                                                fontWeight: hasUnread
+                                                    ? FontWeight.w500
+                                                    : FontWeight.normal,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                    ),
+                                    if (hasUnread)
+                                      _buildUnreadBadge(unreadCount),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      // Avatar with story ring for online users - tap to view profile
-                      GestureDetector(
-                        onTap: () => Get.to(
-                          () => ProfileViewScreen(
-                            userId: '${chat['name']?.hashCode ?? 0}',
-                            name: chat['name'] as String,
-                            avatar: chat['image'] as String,
-                            bio: 'Hey there! I\'m using Nexora 💜',
-                            year: '3rd Year',
-                            major: 'Computer Science',
-                            interests: const ['Coding', 'Music', 'Gaming'],
-                            isOnline: isOnline,
-                          ),
-                          transition: Transition.rightToLeftWithFade,
-                        ),
-                        child: Stack(
-                          children: [
-                            Container(
-                              padding: isOnline
-                                  ? const EdgeInsets.all(3)
-                                  : null,
-                              decoration: isOnline
-                                  ? BoxDecoration(
-                                      borderRadius: BorderRadius.circular(18),
-                                      gradient: NexoraGradients.romanticGlow,
-                                    )
-                                  : null,
-                              child: Container(
-                                width: 54,
-                                height: 54,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: isOnline
-                                      ? Border.all(
-                                          color: NexoraColors.midnightDark,
-                                          width: 2,
-                                        )
-                                      : null,
-                                  boxShadow: hasUnread
-                                      ? [NexoraShadows.purpleGlow]
-                                      : null,
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Image.network(
-                                    chat['image'] as String,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        decoration: BoxDecoration(
-                                          gradient:
-                                              NexoraGradients.primaryButton,
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            (chat['name'] as String)[0],
-                                            style: const TextStyle(
-                                              fontSize: 22,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Online indicator dot
-                            if (isOnline)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  width: 16,
-                                  height: 16,
-                                  decoration: BoxDecoration(
-                                    color: NexoraColors.online,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: NexoraColors.midnightDark,
-                                      width: 3,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: NexoraColors.online.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        blurRadius: 6,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      // Content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          chat['name'] as String,
-                                          style: TextStyle(
-                                            fontWeight: hasUnread
-                                                ? FontWeight.bold
-                                                : FontWeight.w600,
-                                            fontSize: 15,
-                                            color: NexoraColors.textPrimary,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  chat['time'] as String,
-                                  style: TextStyle(
-                                    color: hasUnread
-                                        ? NexoraColors.primaryPurple
-                                        : NexoraColors.textMuted,
-                                    fontSize: 12,
-                                    fontWeight: hasUnread
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                // Message status icon (for sent messages)
-                                if (!hasUnread && !isTyping) ...[
-                                  Icon(
-                                    Icons.done_all,
-                                    size: 16,
-                                    color: NexoraColors.accentCyan,
-                                  ),
-                                  const SizedBox(width: 4),
-                                ],
-                                Expanded(
-                                  child: isTyping
-                                      ? Row(
-                                          children: [
-                                            Text(
-                                              'typing',
-                                              style: TextStyle(
-                                                color:
-                                                    NexoraColors.primaryPurple,
-                                                fontSize: 14,
-                                                fontStyle: FontStyle.italic,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            _buildTypingIndicator(),
-                                          ],
-                                        )
-                                      : Text(
-                                          chat['lastMessage'] as String,
-                                          style: TextStyle(
-                                            color: hasUnread
-                                                ? NexoraColors.textSecondary
-                                                : NexoraColors.textMuted,
-                                            fontSize: 14,
-                                            fontWeight: hasUnread
-                                                ? FontWeight.w500
-                                                : FontWeight.normal,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                ),
-                                if (hasUnread)
-                                  Container(
-                                    margin: const EdgeInsets.only(left: 10),
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      gradient: NexoraGradients.primaryButton,
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: NexoraColors.primaryPurple
-                                              .withValues(alpha: 0.4),
-                                          blurRadius: 8,
-                                          spreadRadius: 0,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '${chat['unread']}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  void _showChatOptions(Map<String, dynamic> chat) {
+  Widget _buildAvatar(
+    String avatar,
+    String name,
+    bool isOnline,
+    bool hasUnread,
+    ProfileModel? user,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        if (user != null) {
+          Get.to(
+            () => ProfileViewScreen(profile: user),
+            transition: Transition.rightToLeftWithFade,
+          );
+        }
+      },
+      child: Stack(
+        children: [
+          Container(
+            padding: isOnline ? EdgeInsets.all(3.r) : null,
+            decoration: isOnline
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(18.r),
+                    gradient: NexoraGradients.romanticGlow,
+                  )
+                : null,
+            child: Container(
+              width: 54.r,
+              height: 54.r,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16.r),
+                border: isOnline
+                    ? Border.all(color: NexoraColors.midnightDark, width: 2.w)
+                    : null,
+                boxShadow: hasUnread ? [NexoraShadows.purpleGlow] : null,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14.r),
+                child: avatar.startsWith('http')
+                    ? Image.network(
+                        avatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholder(name),
+                      )
+                    : _buildPlaceholder(name),
+              ),
+            ),
+          ),
+          if (isOnline)
+            Positioned(bottom: 0, right: 0, child: _buildOnlineIndicator()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(String name) {
+    return Container(
+      decoration: BoxDecoration(gradient: NexoraGradients.primaryButton),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0] : '?',
+          style: TextStyle(
+            fontSize: 22.sp,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOnlineIndicator() {
+    return Container(
+      width: 16.r,
+      height: 16.r,
+      decoration: BoxDecoration(
+        color: NexoraColors.online,
+        shape: BoxShape.circle,
+        border: Border.all(color: NexoraColors.midnightDark, width: 3.w),
+        boxShadow: [
+          BoxShadow(
+            color: NexoraColors.online.withOpacity(0.5),
+            blurRadius: 6.r,
+            spreadRadius: 1.r,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Row(
+      children: [
+        Text(
+          'typing',
+          style: TextStyle(
+            color: NexoraColors.primaryPurple,
+            fontSize: 14.sp,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            return TweenAnimationBuilder(
+              tween: Tween<double>(begin: 0, end: 1),
+              duration: Duration(milliseconds: 600 + (index * 200)),
+              builder: (context, double value, child) {
+                return Container(
+                  width: 4.r,
+                  height: 4.r,
+                  margin: EdgeInsets.symmetric(horizontal: 1.w),
+                  decoration: BoxDecoration(
+                    color: NexoraColors.primaryPurple.withOpacity(
+                      0.4 + (value * 0.6),
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                );
+              },
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnreadBadge(int count) {
+    return Container(
+      margin: EdgeInsets.only(left: 10.w),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        gradient: NexoraGradients.primaryButton,
+        borderRadius: BorderRadius.circular(12.r),
+        boxShadow: [
+          BoxShadow(
+            color: NexoraColors.primaryPurple.withOpacity(0.4),
+            blurRadius: 8.r,
+          ),
+        ],
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11.sp,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  void _showChatOptions(
+    ChatModel chat,
+    String name,
+    String avatar,
+    bool isOnline,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: BoxDecoration(
           gradient: NexoraGradients.mainBackground,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28.r)),
           border: Border.all(
             color: NexoraColors.primaryPurple.withOpacity(0.2),
           ),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(20.r),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 40,
-                  height: 4,
+                  width: 40.w,
+                  height: 4.h,
                   decoration: BoxDecoration(
                     color: NexoraColors.glassBorder,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(2.r),
                   ),
                 ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
                     Container(
-                      width: 50,
-                      height: 50,
+                      width: 50.r,
+                      height: 50.r,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(16.r),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Image.network(
-                          chat['image'] as String,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: NexoraGradients.primaryButton,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  (chat['name'] as String)[0],
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                        borderRadius: BorderRadius.circular(14.r),
+                        child: avatar.startsWith('http')
+                            ? Image.network(
+                                avatar,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    _buildPlaceholder(name),
+                              )
+                            : _buildPlaceholder(name),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12.w),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            chat['name'] as String,
-                            style: const TextStyle(
-                              fontSize: 18,
+                            name,
+                            style: TextStyle(
+                              fontSize: 18.sp,
                               fontWeight: FontWeight.w600,
                               color: NexoraColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(height: 2),
                           Text(
-                            chat['online'] == true ? 'Online' : 'Offline',
+                            isOnline ? 'Online' : 'Offline',
                             style: TextStyle(
-                              fontSize: 13,
-                              color: chat['online'] == true
+                              fontSize: 13.sp,
+                              color: isOnline
                                   ? NexoraColors.online
                                   : NexoraColors.textMuted,
                             ),
@@ -845,7 +827,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24.h),
                 _buildChatOption(
                   Icons.push_pin_rounded,
                   'Pin conversation',
@@ -866,7 +848,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   'Delete chat',
                   NexoraColors.error,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8.h),
               ],
             ),
           ),
@@ -879,24 +861,24 @@ class _ChatListScreenState extends State<ChatListScreen>
     return GestureDetector(
       onTap: () => Get.back(),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: EdgeInsets.symmetric(vertical: 12.h),
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 40.r,
+              height: 40.r,
               decoration: BoxDecoration(
                 color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12.r),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 20.r),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: 14.w),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 15.sp,
                   color: color == NexoraColors.error
                       ? color
                       : NexoraColors.textPrimary,
@@ -907,177 +889,32 @@ class _ChatListScreenState extends State<ChatListScreen>
             Icon(
               Icons.chevron_right_rounded,
               color: NexoraColors.textMuted,
-              size: 20,
+              size: 20.r,
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTypingIndicator() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (index) {
-        return TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 600 + (index * 200)),
-          builder: (context, double value, child) {
-            return Container(
-              width: 5,
-              height: 5,
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              decoration: BoxDecoration(
-                color: NexoraColors.primaryPurple.withOpacity(
-                  0.4 + (value * 0.6),
-                ),
-                shape: BoxShape.circle,
-              ),
-            );
-          },
-        );
-      }),
-    );
-  }
-
-  Widget _buildOnlineFriendAvatar(Map<String, dynamic> friend) {
-    return GestureDetector(
-      onTap: () => Get.to(
-        () => ChatDetailScreen(
-          name: friend['name'] as String,
-          avatar: friend['image'] as String,
-          chatId: friend['chatId'] as String?,
-          participantId: friend['userId'] as String?,
-        ),
-      ),
-      child: Container(
-        width: 72,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        child: Column(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: NexoraGradients.romanticGlow,
-                  ),
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: NexoraColors.midnightDark,
-                        width: 2,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: Image.network(
-                        friend['image'] as String,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              gradient: NexoraGradients.primaryButton,
-                            ),
-                            child: Center(
-                              child: Text(
-                                (friend['name'] as String)[0],
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 2,
-                  right: 2,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: NexoraColors.online,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: NexoraColors.midnightDark,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              (friend['name'] as String).split(' ').first,
-              style: const TextStyle(
-                fontSize: 12,
-                color: NexoraColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showNewMessageSheet() {
-    Get.snackbar(
-      'New Message',
-      'Start a new conversation',
-      backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 1),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
     );
   }
 
   Widget _buildEmptyState(String message, IconData icon) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: NexoraColors.glassBackground,
-              shape: BoxShape.circle,
-              border: Border.all(color: NexoraColors.glassBorder),
-            ),
-            child: Icon(
-              icon,
-              size: 48,
-              color: NexoraColors.primaryPurple.withOpacity(0.5),
-            ),
+          Icon(
+            icon,
+            size: 64.r,
+            color: NexoraColors.textMuted.withOpacity(0.5),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 16.h),
           Text(
             message,
-            style: const TextStyle(
+            style: TextStyle(
               color: NexoraColors.textSecondary,
-              fontSize: 16,
+              fontSize: 16.sp,
               fontWeight: FontWeight.w500,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Start a new conversation',
-            style: TextStyle(color: NexoraColors.textMuted, fontSize: 14),
           ),
         ],
       ),

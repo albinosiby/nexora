@@ -199,14 +199,14 @@ class NexoraTextStyles {
   static TextStyle get logoStyle => TextStyle(
     fontSize: 32.sp,
     fontWeight: FontWeight.bold,
-    letterSpacing: 2,
+    letterSpacing: 2.w,
     color: NexoraColors.primaryPurple,
   );
 
   // Tagline style
   static TextStyle get taglineStyle => TextStyle(
     fontSize: 10.sp,
-    letterSpacing: 1.5,
+    letterSpacing: 1.5.w,
     color: NexoraColors.textSecondary,
   );
 
@@ -253,7 +253,7 @@ class NexoraTextStyles {
     shadows: [
       Shadow(
         color: NexoraColors.primaryPurple.withOpacity(0.5),
-        blurRadius: 10,
+        blurRadius: 10.r,
       ),
     ],
   );
@@ -362,8 +362,11 @@ class NexoraDecorations {
   }) {
     return BoxDecoration(
       color: NexoraColors.glassBackground,
-      borderRadius: BorderRadius.circular(borderRadius),
-      border: Border.all(color: borderColor ?? NexoraColors.glassBorder),
+      borderRadius: BorderRadius.circular(borderRadius.r),
+      border: Border.all(
+        color: borderColor ?? NexoraColors.glassBorder,
+        width: 1.w,
+      ),
     );
   }
 
@@ -374,7 +377,7 @@ class NexoraDecorations {
   }) {
     return BoxDecoration(
       gradient: gradient,
-      borderRadius: BorderRadius.circular(borderRadius),
+      borderRadius: BorderRadius.circular(borderRadius.r),
       boxShadow: [NexoraShadows.cardShadow],
     );
   }
@@ -386,7 +389,7 @@ class NexoraDecorations {
   }) {
     return BoxDecoration(
       gradient: gradient ?? NexoraGradients.primaryButton,
-      borderRadius: BorderRadius.circular(size * 0.3),
+      borderRadius: BorderRadius.circular(size * 0.3.r),
       boxShadow: [NexoraShadows.purpleGlow],
     );
   }
@@ -457,9 +460,9 @@ class NexoraTheme {
           ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             foregroundColor: NexoraColors.textPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            padding: EdgeInsets.symmetric(horizontal: 32.w, vertical: 14.h),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(24.r),
             ),
             shadowColor: Colors.transparent,
           ).copyWith(
@@ -486,23 +489,20 @@ class NexoraTheme {
       filled: true,
       fillColor: NexoraColors.glassBackground,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16.r),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16.r),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(
-          color: NexoraColors.primaryPurple,
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(16.r),
+        borderSide: BorderSide(color: NexoraColors.primaryPurple, width: 1.w),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: NexoraColors.error),
+        borderRadius: BorderRadius.circular(16.r),
+        borderSide: BorderSide(color: NexoraColors.error, width: 1.w),
       ),
       hintStyle: const TextStyle(color: NexoraColors.textMuted),
       labelStyle: const TextStyle(color: NexoraColors.textSecondary),

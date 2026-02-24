@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../../../core/theme/nexora_theme.dart';
-import '../../../core/services/dummy_database.dart' hide ConnectionStatus;
 import '../../connections/repositories/connection_service.dart';
 import '../../notifications/screens/notification_screen.dart';
+import '../../notifications/controllers/notification_controller.dart';
 import '../../profile/screens/profile_view_screen.dart';
 import '../../settings/screens/settings_screen.dart';
+import '../models/match_user_model.dart';
+import '../controllers/match_controller.dart';
 
 class MatchScreen extends StatefulWidget {
   const MatchScreen({super.key});
@@ -18,78 +21,13 @@ class _MatchScreenState extends State<MatchScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late AnimationController _animationController;
-  int _selectedFilter = 0;
-  String _searchQuery = '';
   final ConnectionService _connectionService = Get.find<ConnectionService>();
-  final DummyDatabase _db = DummyDatabase.instance;
+  final MatchController _controller = MatchController.to;
+  final NotificationController _notificationController = Get.put(
+    NotificationController(),
+  );
 
   final List<String> _filters = ['All', 'Online', 'New', 'Verified'];
-
-  List<Map<String, dynamic>> get users {
-    return _db.users
-        .map((user) {
-          return {
-            'id': user.id,
-            'name': user.displayName,
-            'age': user.age,
-            'year': user.year,
-            'major': user.major,
-            'bio': user.bio,
-            'interests': user.interests,
-            'image': user.avatar,
-            'connections': user.connections,
-            'isOnline': user.isOnline,
-            'isVerified': user.isVerified,
-            'lastActive': _formatLastActive(user.lastActive),
-            'photos': user.photos ?? [user.avatar],
-          };
-        })
-        .where((user) {
-          // Apply filter
-          switch (_selectedFilter) {
-            case 1: // Online
-              if (user['isOnline'] != true) return false;
-              break;
-            case 2: // New (less than 50 connections)
-              if ((user['connections'] as int) >= 50) return false;
-              break;
-            case 3: // Verified
-              if (user['isVerified'] != true) return false;
-              break;
-            default:
-              break;
-          }
-          // Apply search
-          if (_searchQuery.isNotEmpty) {
-            final query = _searchQuery.toLowerCase();
-            final name = (user['name'] ?? '').toString().toLowerCase();
-            final major = (user['major'] ?? '').toString().toLowerCase();
-            final interests = (user['interests'] ?? '')
-                .toString()
-                .toLowerCase();
-            final bio = (user['bio'] ?? '').toString().toLowerCase();
-            if (!(name.contains(query) ||
-                major.contains(query) ||
-                interests.contains(query) ||
-                bio.contains(query))) {
-              return false;
-            }
-          }
-          return true;
-        })
-        .toList();
-  }
-
-  String _formatLastActive(DateTime? lastActive) {
-    if (lastActive == null) return 'Unknown';
-    final now = DateTime.now();
-    final diff = now.difference(lastActive);
-
-    if (diff.inMinutes < 1) return 'now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
 
   @override
   void initState() {
@@ -120,7 +58,7 @@ class _MatchScreenState extends State<MatchScreen>
             floating: true,
             backgroundColor: Colors.transparent,
             elevation: 0,
-            expandedHeight: 60,
+            expandedHeight: 60.h,
             title: Row(
               children: [
                 ShaderMask(
@@ -133,20 +71,22 @@ class _MatchScreenState extends State<MatchScreen>
                   child: Text(
                     'Kootu',
                     style: NexoraTextStyles.headline2.copyWith(
-                      fontSize: 26,
+                      fontSize: 26.sp,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.5.w,
                     ),
                   ),
                 ),
                 const Spacer(),
-                _buildHeaderIcon(
-                  Icons.notifications_outlined,
-                  3,
-                  onTap: () => Get.to(() => const NotificationScreen()),
+                Obx(
+                  () => _buildHeaderIcon(
+                    Icons.notifications_outlined,
+                    _notificationController.unreadCount,
+                    onTap: () => Get.to(() => const NotificationScreen()),
+                  ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12.w),
                 _buildHeaderIcon(
                   Icons.settings_outlined,
                   0,
@@ -159,14 +99,14 @@ class _MatchScreenState extends State<MatchScreen>
           // Greeting Section
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 16.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Discover New People',
                     style: NexoraTextStyles.headline1.copyWith(
-                      fontSize: 28,
+                      fontSize: 28.sp,
                       fontWeight: FontWeight.w700,
                       height: 1.2,
                     ),
@@ -179,50 +119,46 @@ class _MatchScreenState extends State<MatchScreen>
           // Search Bar
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20.w),
               child: Container(
-                height: 54,
+                height: 54.h,
                 decoration: BoxDecoration(
                   color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(27),
+                  borderRadius: BorderRadius.circular(27.r),
                   border: Border.all(color: NexoraColors.glassBorder),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      blurRadius: 10.r,
+                      offset: Offset(0, 4.h),
                     ),
                   ],
                 ),
                 child: Row(
                   children: [
-                    const SizedBox(width: 18),
-                    const Icon(
+                    SizedBox(width: 18.w),
+                    Icon(
                       Icons.search_rounded,
                       color: NexoraColors.textMuted,
-                      size: 22,
+                      size: 22.r,
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12.w),
                     Expanded(
                       child: TextField(
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: NexoraColors.textPrimary,
-                          fontSize: 15,
+                          fontSize: 15.sp,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Search by name, major, interests...',
                           hintStyle: TextStyle(
                             color: NexoraColors.textMuted,
-                            fontSize: 14,
+                            fontSize: 14.sp,
                           ),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value;
-                          });
-                        },
+                        onChanged: (value) => _controller.setSearchQuery(value),
                       ),
                     ),
                   ],
@@ -231,85 +167,87 @@ class _MatchScreenState extends State<MatchScreen>
             ),
           ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          SliverToBoxAdapter(child: SizedBox(height: 20.h)),
 
           // Filter Chips with horizontal scroll
           SliverToBoxAdapter(
             child: SizedBox(
-              height: 40,
+              height: 40.h,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: 20.w),
                 itemCount: _filters.length,
                 itemBuilder: (context, index) {
                   return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: _buildFilterChip(_filters[index], index),
+                    padding: EdgeInsets.only(right: 10.w),
+                    child: Obx(() => _buildFilterChip(_filters[index], index)),
                   );
                 },
               ),
             ),
           ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          SliverToBoxAdapter(child: SizedBox(height: 24.h)),
 
           // Discover Section Header
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20.w),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(8.r),
                     decoration: BoxDecoration(
                       color: NexoraColors.accentCyan.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(10.r),
                     ),
                     child: Icon(
                       Icons.explore_rounded,
                       color: NexoraColors.accentCyan,
-                      size: 18,
+                      size: 18.r,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  const Text(
+                  SizedBox(width: 10.w),
+                  Text(
                     'Discover People',
                     style: TextStyle(
                       color: NexoraColors.textPrimary,
-                      fontSize: 18,
+                      fontSize: 18.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: NexoraColors.success.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: NexoraColors.success,
-                            shape: BoxShape.circle,
+                  Obx(
+                    () => Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10.w,
+                        vertical: 4.h,
+                      ),
+                      decoration: BoxDecoration(
+                        color: NexoraColors.success.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6.r,
+                            height: 6.r,
+                            decoration: const BoxDecoration(
+                              color: NexoraColors.success,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${users.where((u) => u['isOnline'] == true).length} online',
-                          style: const TextStyle(
-                            color: NexoraColors.success,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                          SizedBox(width: 6.w),
+                          Text(
+                            '${_controller.onlineCount} online',
+                            style: TextStyle(
+                              color: NexoraColors.success,
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -317,31 +255,75 @@ class _MatchScreenState extends State<MatchScreen>
             ),
           ),
 
-          // Main Content - Grid View
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 0.72,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildModernCard(users[index]),
-                childCount: users.length,
-              ),
-            ),
-          ),
+          // Main Content - Realtime Grid View
+          Obx(() {
+            if (_controller.isLoading.value) {
+              return SliverToBoxAdapter(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.r),
+                    child: const CircularProgressIndicator(
+                      color: NexoraColors.primaryPurple,
+                    ),
+                  ),
+                ),
+              );
+            }
 
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            final filteredUsers = _controller.filteredUsers;
+
+            if (filteredUsers.isEmpty) {
+              return SliverToBoxAdapter(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(40.r),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 48.r,
+                          color: NexoraColors.textMuted.withOpacity(0.5),
+                        ),
+                        SizedBox(height: 12.h),
+                        Text(
+                          'No people found',
+                          style: TextStyle(
+                            color: NexoraColors.textMuted,
+                            fontSize: 16.sp,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return SliverPadding(
+              padding: EdgeInsets.all(20.r),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16.h,
+                  crossAxisSpacing: 16.w,
+                  childAspectRatio: 0.72,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildModernCard(filteredUsers[index]),
+                  childCount: filteredUsers.length,
+                ),
+              ),
+            );
+          }),
+
+          SliverToBoxAdapter(child: SizedBox(height: 100.h)),
         ],
       ),
     );
   }
 
   Widget _buildFilterChip(String label, int index) {
-    final isSelected = _selectedFilter == index;
+    final isSelected = _controller.selectedFilter.value == index;
     final IconData? icon = index == 1
         ? Icons.circle
         : index == 2
@@ -351,14 +333,17 @@ class _MatchScreenState extends State<MatchScreen>
         : null;
 
     return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = index),
+      onTap: () {
+        _controller.setFilter(index);
+        _animationController.forward(from: 0);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
         decoration: BoxDecoration(
           gradient: isSelected ? NexoraGradients.primaryButton : null,
           color: isSelected ? null : NexoraColors.glassBackground,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(20.r),
           border: Border.all(
             color: isSelected ? Colors.transparent : NexoraColors.glassBorder,
           ),
@@ -366,8 +351,8 @@ class _MatchScreenState extends State<MatchScreen>
               ? [
                   BoxShadow(
                     color: NexoraColors.primaryPurple.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    blurRadius: 8.r,
+                    offset: Offset(0, 2.h),
                   ),
                 ]
               : null,
@@ -378,20 +363,20 @@ class _MatchScreenState extends State<MatchScreen>
             if (icon != null) ...[
               Icon(
                 icon,
-                size: index == 1 ? 8 : 14,
+                size: index == 1 ? 8.r : 14.r,
                 color: isSelected
                     ? Colors.white
                     : index == 1
                     ? NexoraColors.success
                     : NexoraColors.textMuted,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6.w),
             ],
             Text(
               label,
               style: TextStyle(
                 color: isSelected ? Colors.white : NexoraColors.textSecondary,
-                fontSize: 13,
+                fontSize: 13.sp,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
@@ -401,19 +386,9 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
-  void _navigateToProfile(Map<String, dynamic> user) {
+  void _navigateToProfile(MatchUserModel user) {
     Get.to(
-      () => ProfileViewScreen(
-        userId: user['id']?.toString() ?? '${user['name']?.hashCode ?? 0}',
-        name: user['name'],
-        avatar:
-            user['image'] ??
-            'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(user['name'] as String)}&backgroundColor=transparent',
-        bio: user['bio'] ?? '',
-        year: user['year'] ?? '',
-        major: user['major'] ?? '',
-        isOnline: user['isOnline'] ?? false,
-      ),
+      () => ProfileViewScreen(profile: user.toProfileModel()),
       transition: Transition.rightToLeftWithFade,
     );
   }
@@ -424,29 +399,29 @@ class _MatchScreenState extends State<MatchScreen>
       child: Stack(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.all(8.r),
             decoration: BoxDecoration(
               color: NexoraColors.glassBackground,
               shape: BoxShape.circle,
               border: Border.all(color: NexoraColors.glassBorder),
             ),
-            child: Icon(icon, color: NexoraColors.textPrimary, size: 20),
+            child: Icon(icon, color: NexoraColors.textPrimary, size: 20.r),
           ),
           if (count > 0)
             Positioned(
               top: 0,
               right: 0,
               child: Container(
-                padding: const EdgeInsets.all(4),
+                padding: EdgeInsets.all(4.r),
                 decoration: const BoxDecoration(
                   color: NexoraColors.romanticPink,
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   count.toString(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: NexoraColors.textPrimary,
-                    fontSize: 8,
+                    fontSize: 8.sp,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -465,28 +440,28 @@ class _MatchScreenState extends State<MatchScreen>
       colorText: Colors.white,
       snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 2),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      icon: const Padding(
-        padding: EdgeInsets.only(left: 12),
-        child: Icon(Icons.person_add_rounded, color: Colors.white),
+      margin: EdgeInsets.all(16.r),
+      borderRadius: 12.r,
+      icon: Padding(
+        padding: EdgeInsets.only(left: 12.w),
+        child: const Icon(Icons.person_add_rounded, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildModernCard(Map<String, dynamic> user) {
+  Widget _buildModernCard(MatchUserModel user) {
     return GestureDetector(
       onTap: () => _navigateToProfile(user),
       child: Container(
         decoration: BoxDecoration(
           color: NexoraColors.glassBackground,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(24.r),
           border: Border.all(color: NexoraColors.glassBorder),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              blurRadius: 12.r,
+              offset: Offset(0, 4.h),
             ),
           ],
         ),
@@ -509,25 +484,24 @@ class _MatchScreenState extends State<MatchScreen>
                           NexoraColors.romanticPink.withOpacity(0.5),
                         ],
                       ),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24.r),
                       ),
                     ),
                     child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24.r),
                       ),
                       child: Image.network(
-                        user['image'] ??
-                            'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(user['name'] as String)}&backgroundColor=transparent',
+                        user.avatar,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(
-                            (user['name'] as String).isNotEmpty
-                                ? (user['name'] as String)[0].toUpperCase()
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
                                 : '?',
-                            style: const TextStyle(
-                              fontSize: 40,
+                            style: TextStyle(
+                              fontSize: 40.sp,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
@@ -537,24 +511,24 @@ class _MatchScreenState extends State<MatchScreen>
                     ),
                   ),
                   // Online indicator
-                  if (user['isOnline'])
+                  if (user.isOnline)
                     Positioned(
                       top: 10,
                       right: 10,
                       child: Container(
-                        width: 14,
-                        height: 14,
+                        width: 14.r,
+                        height: 14.r,
                         decoration: BoxDecoration(
                           color: NexoraColors.success,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: NexoraColors.midnightDark,
-                            width: 2.5,
+                            width: 2.5.w,
                           ),
                           boxShadow: [
                             BoxShadow(
                               color: NexoraColors.success.withOpacity(0.5),
-                              blurRadius: 6,
+                              blurRadius: 6.r,
                             ),
                           ],
                         ),
@@ -570,7 +544,7 @@ class _MatchScreenState extends State<MatchScreen>
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(12.r),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -580,30 +554,31 @@ class _MatchScreenState extends State<MatchScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            '${user['name']}, ${user['age']}',
-                            style: const TextStyle(
+                            '${user.name}, ${user.age}',
+                            style: TextStyle(
                               color: NexoraColors.textPrimary,
                               fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                              fontSize: 14.sp,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Icon(
-                          Icons.verified_rounded,
-                          color: NexoraColors.accentCyan,
-                          size: 14,
-                        ),
+                        if (user.isVerified)
+                          Icon(
+                            Icons.verified_rounded,
+                            color: NexoraColors.accentCyan,
+                            size: 14.r,
+                          ),
                       ],
                     ),
 
                     // Major and Year
                     Text(
-                      '${user['year']} • ${user['major']}',
-                      style: const TextStyle(
+                      '${user.year} • ${user.major}',
+                      style: TextStyle(
                         color: NexoraColors.textMuted,
-                        fontSize: 10,
+                        fontSize: 10.sp,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -614,15 +589,15 @@ class _MatchScreenState extends State<MatchScreen>
                       children: [
                         Icon(
                           Icons.people_alt_rounded,
-                          size: 12,
+                          size: 12.r,
                           color: NexoraColors.primaryPurple,
                         ),
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4.w),
                         Text(
-                          '${user['connections']}',
-                          style: const TextStyle(
+                          '${user.connections}',
+                          style: TextStyle(
                             color: NexoraColors.textPrimary,
-                            fontSize: 10,
+                            fontSize: 10.sp,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -640,8 +615,8 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
-  Widget _buildConnectionButton(Map<String, dynamic> user) {
-    final userId = '${user['name']?.hashCode ?? 0}';
+  Widget _buildConnectionButton(MatchUserModel user) {
+    final userId = user.id;
     return Obx(() {
       final status = _connectionService.getStatus(userId);
 
@@ -671,13 +646,13 @@ class _MatchScreenState extends State<MatchScreen>
             _connectionService.cancelRequest(userId);
             Get.snackbar(
               'Request Cancelled',
-              'Connection request to ${user['name']} cancelled',
+              'Connection request to ${user.name} cancelled',
               backgroundColor: NexoraColors.glassBackground,
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
               duration: const Duration(seconds: 2),
-              margin: const EdgeInsets.all(16),
-              borderRadius: 12,
+              margin: EdgeInsets.all(16.r),
+              borderRadius: 12.r,
             );
           };
           break;
@@ -691,16 +666,19 @@ class _MatchScreenState extends State<MatchScreen>
             _connectionService.acceptRequest(userId);
             Get.snackbar(
               'Connected!',
-              'You are now connected with ${user['name']}',
+              'You are now connected with ${user.name}',
               backgroundColor: NexoraColors.success.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
               duration: const Duration(seconds: 2),
-              margin: const EdgeInsets.all(16),
-              borderRadius: 12,
-              icon: const Padding(
-                padding: EdgeInsets.only(left: 12),
-                child: Icon(Icons.check_circle_rounded, color: Colors.white),
+              margin: EdgeInsets.all(16.r),
+              borderRadius: 12.r,
+              icon: Padding(
+                padding: EdgeInsets.only(left: 12.w),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                ),
               ),
             );
           };
@@ -712,29 +690,29 @@ class _MatchScreenState extends State<MatchScreen>
           onTap = () {
             _connectionService.sendRequest(
               userId: userId,
-              name: user['name'] ?? '',
-              avatar: user['image'] ?? '',
-              major: user['major'] ?? '',
-              year: user['year'] ?? '',
+              name: user.name,
+              avatar: user.avatar,
+              major: user.major,
+              year: user.year,
             );
-            _showConnectSnackbar(user['name']);
+            _showConnectSnackbar(user.name);
           };
       }
 
       return GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
           decoration: BoxDecoration(
             gradient: gradient,
             color: bgColor,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12.r),
             boxShadow: gradient != null
                 ? [
                     BoxShadow(
                       color: NexoraColors.primaryPurple.withOpacity(0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+                      blurRadius: 4.r,
+                      offset: Offset(0, 2.h),
                     ),
                   ]
                 : null,
@@ -742,13 +720,13 @@ class _MatchScreenState extends State<MatchScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 10, color: textColor),
-              const SizedBox(width: 4),
+              Icon(icon, size: 10.r, color: textColor),
+              SizedBox(width: 4.w),
               Text(
                 label,
                 style: TextStyle(
                   color: textColor,
-                  fontSize: 9,
+                  fontSize: 9.sp,
                   fontWeight: FontWeight.w600,
                 ),
               ),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'theme/nexora_theme.dart';
 import 'widgets/dark_background.dart';
 import 'widgets/glass_container.dart';
 import '../modules/discover/screens/match_screen.dart';
 import '../modules/chat/screens/chat_list_screen.dart';
-import '../modules/stories/screens/broadcast_screen.dart';
+import '../modules/feed/screens/broadcast_screen.dart';
 import '../modules/profile/screens/profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -32,11 +33,11 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
         bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(20.w),
           child: GlassContainer(
             borderRadius: 40,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: EdgeInsets.symmetric(vertical: 10.h),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -65,13 +66,13 @@ class _MainScreenState extends State<MainScreen> {
             color: isActive
                 ? NexoraColors.primaryPurple
                 : NexoraColors.textSecondary,
-            size: 24,
+            size: 24.r,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4.h),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 10.sp,
               color: isActive
                   ? NexoraColors.primaryPurple
                   : NexoraColors.textSecondary,

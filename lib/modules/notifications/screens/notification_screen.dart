@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/services/dummy_database.dart';
 import '../../connections/repositories/connection_service.dart';
 import '../../connections/screens/connections_screen.dart';
+import '../controllers/notification_controller.dart';
+import '../models/notification_model.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -16,25 +18,19 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final DummyDatabase _db = DummyDatabase.instance;
+  final NotificationController _controller = Get.put(NotificationController());
+  final ConnectionService _connectionService = Get.find<ConnectionService>();
 
-  List<Map<String, dynamic>> get notifications {
-    return _db.notifications.map((notif) {
-      final user = _db.getUserById(notif.userId);
-      final notifConfig = _getNotificationConfig(notif.type);
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
 
-      return {
-        'id': notif.id,
-        'type': notif.type.name,
-        'user': user?.displayName ?? 'system',
-        'message': notif.message,
-        'time': _formatTime(notif.timestamp),
-        'read': notif.isRead,
-        'icon': notifConfig['icon'],
-        'color': notifConfig['color'],
-        'avatar': user?.avatar,
-      };
-    }).toList();
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Map<String, dynamic> _getNotificationConfig(NotificationType type) {
@@ -50,8 +46,8 @@ class _NotificationScreenState extends State<NotificationScreen>
           'icon': Icons.favorite_border,
           'color': NexoraColors.romanticPink,
         };
-      case NotificationType.event:
-        return {'icon': Icons.event, 'color': NexoraColors.brightPurple};
+      case NotificationType.feed:
+        return {'icon': Icons.rss_feed, 'color': NexoraColors.brightPurple};
       case NotificationType.mention:
         return {
           'icon': Icons.alternate_email,
@@ -62,6 +58,10 @@ class _NotificationScreenState extends State<NotificationScreen>
           'icon': Icons.person_add_alt_1,
           'color': NexoraColors.primaryPurple,
         };
+      case NotificationType.message:
+        return {'icon': Icons.chat_bubble, 'color': NexoraColors.accentCyan};
+      case NotificationType.profileLike:
+        return {'icon': Icons.favorite, 'color': NexoraColors.romanticPink};
     }
   }
 
@@ -78,23 +78,6 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
   }
 
-  final ConnectionService _connectionService = Get.find<ConnectionService>();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  List<Map<String, dynamic>> get unreadNotifications =>
-      notifications.where((n) => n['read'] == false).toList();
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,17 +87,20 @@ class _NotificationScreenState extends State<NotificationScreen>
         elevation: 0,
         title: Text('Notifications', style: NexoraTextStyles.headline2),
         actions: [
-          if (unreadNotifications.isNotEmpty)
-            TextButton(
-              onPressed: _markAllAsRead,
-              child: const Text(
-                'Mark all read',
-                style: TextStyle(
-                  color: NexoraColors.primaryPurple,
-                  fontSize: 12,
-                ),
-              ),
-            ),
+          Obx(
+            () => _controller.unreadCount > 0
+                ? TextButton(
+                    onPressed: _controller.markAllAsRead,
+                    child: Text(
+                      'Mark all read',
+                      style: TextStyle(
+                        color: NexoraColors.primaryPurple,
+                        fontSize: 12.sp,
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
       body: SafeArea(
@@ -126,23 +112,23 @@ class _NotificationScreenState extends State<NotificationScreen>
 
             // Tab bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20.w),
               child: Container(
-                height: 45,
+                height: 45.h,
                 decoration: BoxDecoration(
                   color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(25.r),
                 ),
                 child: TabBar(
                   controller: _tabController,
                   indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(25),
+                    borderRadius: BorderRadius.circular(25.r),
                     gradient: NexoraGradients.primaryButton,
                   ),
                   labelColor: NexoraColors.textPrimary,
                   unselectedLabelColor: NexoraColors.textMuted,
-                  labelStyle: const TextStyle(
-                    fontSize: 12,
+                  labelStyle: TextStyle(
+                    fontSize: 12.sp,
                     fontWeight: FontWeight.w600,
                   ),
                   tabs: [
@@ -151,23 +137,27 @@ class _NotificationScreenState extends State<NotificationScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Text('All'),
-                          if (unreadNotifications.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: NexoraColors.romanticPink,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '${unreadNotifications.length}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: NexoraColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ],
+                          Obx(
+                            () => _controller.unreadCount > 0
+                                ? Padding(
+                                    padding: EdgeInsets.only(left: 6.w),
+                                    child: Container(
+                                      padding: EdgeInsets.all(4.r),
+                                      decoration: const BoxDecoration(
+                                        color: NexoraColors.romanticPink,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        '${_controller.unreadCount}',
+                                        style: TextStyle(
+                                          fontSize: 10.sp,
+                                          color: NexoraColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
                         ],
                       ),
                     ),
@@ -183,19 +173,16 @@ class _NotificationScreenState extends State<NotificationScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildNotificationList(notifications),
-                  _buildNotificationList(
-                    notifications.where((n) => n['type'] == 'mention').toList(),
+                  Obx(() => _buildNotificationList(_controller.notifications)),
+                  Obx(
+                    () => _buildNotificationList(
+                      _controller.mentionNotifications,
+                    ),
                   ),
-                  _buildNotificationList(
-                    notifications
-                        .where(
-                          (n) =>
-                              n['type'] == 'like' ||
-                              n['type'] == 'comment' ||
-                              n['type'] == 'follow',
-                        )
-                        .toList(),
+                  Obx(
+                    () => _buildNotificationList(
+                      _controller.activityNotifications,
+                    ),
                   ),
                 ],
               ),
@@ -206,7 +193,13 @@ class _NotificationScreenState extends State<NotificationScreen>
     );
   }
 
-  Widget _buildNotificationList(List<Map<String, dynamic>> items) {
+  Widget _buildNotificationList(List<NotificationModel> items) {
+    if (_controller.isLoading.value) {
+      return const Center(
+        child: CircularProgressIndicator(color: NexoraColors.primaryPurple),
+      );
+    }
+
     if (items.isEmpty) {
       return Center(
         child: Column(
@@ -214,13 +207,13 @@ class _NotificationScreenState extends State<NotificationScreen>
           children: [
             Icon(
               Icons.notifications_off_outlined,
-              size: 64,
+              size: 64.r,
               color: NexoraColors.textMuted.withOpacity(0.5),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
             Text(
               'No notifications yet',
-              style: TextStyle(color: NexoraColors.textMuted, fontSize: 16),
+              style: TextStyle(color: NexoraColors.textMuted, fontSize: 16.sp),
             ),
           ],
         ),
@@ -228,7 +221,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: 20.w),
       physics: const BouncingScrollPhysics(),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -238,106 +231,88 @@ class _NotificationScreenState extends State<NotificationScreen>
     );
   }
 
-  Widget _buildNotificationItem(Map<String, dynamic> notification, int index) {
+  Widget _buildNotificationItem(NotificationModel notification, int index) {
+    final config = _getNotificationConfig(notification.type);
+
     return TweenAnimationBuilder(
       tween: Tween<double>(begin: 0, end: 1),
       duration: Duration(milliseconds: 300 + (index * 50)),
       curve: Curves.easeOutCubic,
       builder: (context, double value, child) {
         return Transform.translate(
-          offset: Offset(30 * (1 - value), 0),
+          offset: Offset(30.w * (1 - value), 0),
           child: Opacity(
             opacity: value,
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Dismissible(
-                key: Key(notification['id'] as String),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
-                    color: NexoraColors.error.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.delete, color: NexoraColors.error),
-                ),
-                onDismissed: (_) {
-                  setState(() {
-                    notifications.remove(notification);
-                  });
-                },
-                child: GlassContainer(
-                  borderRadius: 20,
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      // Icon
+              padding: EdgeInsets.only(bottom: 12.h),
+              child: GlassContainer(
+                borderRadius: 20.r,
+                padding: EdgeInsets.all(16.r),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 48.w,
+                      height: 48.w,
+                      decoration: BoxDecoration(
+                        color: (config['color'] as Color).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(14.r),
+                      ),
+                      child: Icon(
+                        config['icon'],
+                        color: config['color'],
+                        size: 24.r,
+                      ),
+                    ),
+                    SizedBox(width: 14.w),
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: notification.userName ?? 'User',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: NexoraColors.textPrimary,
+                                    fontSize: 14.sp,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' ${notification.message}',
+                                  style: TextStyle(
+                                    color: NexoraColors.textSecondary,
+                                    fontSize: 14.sp,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 4.h),
+                          Text(
+                            _formatTime(notification.timestamp),
+                            style: TextStyle(
+                              color: NexoraColors.textMuted,
+                              fontSize: 12.sp,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Unread indicator
+                    if (!notification.isRead)
                       Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: (notification['color'] as Color).withOpacity(
-                            0.2,
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          notification['icon'],
-                          color: notification['color'],
-                          size: 24,
+                        width: 10.w,
+                        height: 10.w,
+                        decoration: const BoxDecoration(
+                          color: NexoraColors.primaryPurple,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      // Content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: notification['user'],
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: NexoraColors.textPrimary,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: ' ${notification['message']}',
-                                    style: TextStyle(
-                                      color: NexoraColors.textSecondary,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              notification['time'],
-                              style: TextStyle(
-                                color: NexoraColors.textMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Unread indicator
-                      if (notification['read'] == false)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: NexoraColors.primaryPurple,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -345,14 +320,6 @@ class _NotificationScreenState extends State<NotificationScreen>
         );
       },
     );
-  }
-
-  void _markAllAsRead() {
-    setState(() {
-      for (var notification in notifications) {
-        notification['read'] = true;
-      }
-    });
   }
 
   Widget _buildConnectionRequestsBanner() {
@@ -369,8 +336,8 @@ class _NotificationScreenState extends State<NotificationScreen>
           transition: Transition.rightToLeftWithFade,
         ),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          padding: const EdgeInsets.all(16),
+          margin: EdgeInsets.fromLTRB(20.w, 0, 20.w, 16.h),
+          padding: EdgeInsets.all(16.r),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -378,40 +345,41 @@ class _NotificationScreenState extends State<NotificationScreen>
                 NexoraColors.romanticPink.withOpacity(0.2),
               ],
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16.r),
             border: Border.all(
               color: NexoraColors.primaryPurple.withOpacity(0.3),
+              width: 1.w,
             ),
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(10.r),
                 decoration: BoxDecoration(
                   color: NexoraColors.primaryPurple.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Stack(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.person_add_rounded,
                       color: NexoraColors.primaryPurple,
-                      size: 24,
+                      size: 24.r,
                     ),
                     Positioned(
-                      right: -2,
-                      top: -2,
+                      right: -2.w,
+                      top: -2.h,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: EdgeInsets.all(4.r),
                         decoration: const BoxDecoration(
                           color: NexoraColors.romanticPink,
                           shape: BoxShape.circle,
                         ),
                         child: Text(
                           '${requests.length}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
-                            fontSize: 8,
+                            fontSize: 8.sp,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -420,27 +388,27 @@ class _NotificationScreenState extends State<NotificationScreen>
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Connection Requests',
                       style: TextStyle(
                         color: NexoraColors.textPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 15.sp,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2.h),
                     Text(
                       requests.length == 1
                           ? '${requests.first.name} wants to connect'
                           : '${requests.first.name} and ${requests.length - 1} others want to connect',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: NexoraColors.textSecondary,
-                        fontSize: 12,
+                        fontSize: 12.sp,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

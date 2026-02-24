@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/dark_background.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/services/dummy_database.dart';
-import '../../../core/main_screen.dart';
+import '../models/user_model.dart';
+import '../repositories/auth_repository.dart';
 
 class UserDetailsScreen extends StatefulWidget {
   final String phoneNumber;
@@ -118,17 +119,26 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
 
     try {
-      final db = DummyDatabase.instance;
-      final newUser = db.createUser(
+      final authRepo = AuthRepository.instance;
+      final firebaseUser = authRepo.user;
+
+      if (firebaseUser == null) {
+        throw Exception("No authenticated user found");
+      }
+
+      final newUser = UserModel(
+        id: firebaseUser.uid,
         name: nameController.text.trim(),
-        phone: widget.phoneNumber,
         username: usernameController.text.trim(),
-        dateOfBirth: _selectedDate!,
-        gender: _selectedGender!,
-        isVjecStudent: _isVjecStudent,
+        email: firebaseUser.email ?? '',
+        phone: widget.phoneNumber,
         bio: aboutController.text.trim(),
-        department: _selectedDepartment ?? '',
+        major: _selectedDepartment,
+        createdAt: DateTime.now(),
+        isOnline: true,
       );
+
+      await authRepo.createUserProfile(newUser);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);
@@ -142,33 +152,26 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       });
 
       Get.snackbar(
-        'Welcome to Nexora!',
+        'Welcome to Kottu!',
         'Your account has been created successfully',
         backgroundColor: NexoraColors.success.withOpacity(0.9),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
         duration: const Duration(seconds: 2),
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
       );
 
       await Future.delayed(const Duration(milliseconds: 300));
-
-      if (mounted) {
-        Get.offAll(() => const MainScreen());
-      }
+      // Navigation is now handled by AuthWrapper reactive logic
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
       Get.snackbar(
         'Error',
-        'Something went wrong. Please try again.',
+        'Something went wrong: ${e.toString()}',
         backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
         colorText: Colors.white,
         snackPosition: SnackPosition.TOP,
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
       );
     }
   }
@@ -180,64 +183,64 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         backgroundColor: Colors.transparent,
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24.w),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20.h),
 
                   // Header
                   Center(
                     child: Column(
                       children: [
                         Container(
-                          width: 70,
-                          height: 70,
+                          width: 70.r,
+                          height: 70.r,
                           decoration: BoxDecoration(
                             gradient: NexoraGradients.primaryButton,
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: BorderRadius.circular(22.r),
                             boxShadow: [NexoraShadows.purpleGlow],
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.person_add_rounded,
                             color: NexoraColors.textPrimary,
-                            size: 35,
+                            size: 35.r,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
+                        SizedBox(height: 16.h),
+                        Text(
                           'Complete Your Profile',
                           style: TextStyle(
                             color: NexoraColors.textPrimary,
-                            fontSize: 24,
+                            fontSize: 24.sp,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         Text(
                           'Tell us about yourself to get started',
                           style: TextStyle(
                             color: NexoraColors.textSecondary,
-                            fontSize: 14,
+                            fontSize: 14.sp,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 32),
+                  SizedBox(height: 32.h),
 
                   GlassContainer(
                     borderRadius: 24,
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20.w),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Username field
                         _buildLabel('Username'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         _buildTextField(
                           controller: usernameController,
                           hintText: 'Choose a unique username',
@@ -260,7 +263,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
                         // Full Name field
                         _buildLabel('Full Name'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         _buildTextField(
                           controller: nameController,
                           hintText: 'Enter your full name',
@@ -280,14 +283,14 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
                         // About field
                         _buildLabel('About'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         TextFormField(
                           controller: aboutController,
                           maxLines: 3,
                           maxLength: 150,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: NexoraColors.textPrimary,
-                            fontSize: 15,
+                            fontSize: 15.sp,
                           ),
                           decoration: InputDecoration(
                             hintText: 'Tell us about yourself...',
@@ -297,36 +300,36 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                             counterStyle: TextStyle(
                               color: NexoraColors.textMuted,
                             ),
-                            prefixIcon: const Padding(
-                              padding: EdgeInsets.only(bottom: 50),
+                            prefixIcon: Padding(
+                              padding: EdgeInsets.only(bottom: 50.h),
                               child: Icon(
                                 Icons.info_outline_rounded,
                                 color: NexoraColors.primaryPurple,
-                                size: 22,
+                                size: 22.r,
                               ),
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14.r),
                               borderSide: BorderSide(
                                 color: NexoraColors.glassBorder,
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14.r),
                               borderSide: BorderSide(
                                 color: NexoraColors.glassBorder,
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14.r),
                               borderSide: const BorderSide(
                                 color: NexoraColors.primaryPurple,
                                 width: 2,
                               ),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 16,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16.w,
+                              vertical: 16.h,
                             ),
                           ),
                         ),
@@ -335,13 +338,16 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
                         // Department dropdown
                         _buildLabel('Department'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 12.w),
                           decoration: BoxDecoration(
                             color: NexoraColors.glassBackground,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: NexoraColors.glassBorder),
+                            borderRadius: BorderRadius.circular(14.r),
+                            border: Border.all(
+                              color: NexoraColors.glassBorder,
+                              width: 1.w,
+                            ),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
@@ -349,17 +355,17 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                               value: _selectedDepartment,
                               hint: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.business_rounded,
                                     color: NexoraColors.primaryPurple,
-                                    size: 22,
+                                    size: 22.r,
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12.w),
                                   Text(
                                     'Select your department',
                                     style: TextStyle(
                                       color: NexoraColors.textMuted,
-                                      fontSize: 15,
+                                      fontSize: 15.sp,
                                     ),
                                   ),
                                 ],
@@ -374,17 +380,17 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                                   value: dept,
                                   child: Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.business_rounded,
                                         color: NexoraColors.primaryPurple,
-                                        size: 22,
+                                        size: 22.r,
                                       ),
-                                      const SizedBox(width: 12),
+                                      SizedBox(width: 12.w),
                                       Text(
                                         dept,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: NexoraColors.textPrimary,
-                                          fontSize: 15,
+                                          fontSize: 15.sp,
                                         ),
                                       ),
                                     ],
@@ -404,26 +410,27 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
                         // Date of Birth
                         _buildLabel('Date of Birth'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         GestureDetector(
                           onTap: _selectDate,
                           child: Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: EdgeInsets.all(16.w),
                             decoration: BoxDecoration(
                               color: NexoraColors.glassBackground,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14.r),
                               border: Border.all(
                                 color: NexoraColors.glassBorder,
+                                width: 1.w,
                               ),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.cake_outlined,
                                   color: NexoraColors.primaryPurple,
-                                  size: 22,
+                                  size: 22.r,
                                 ),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12.w),
                                 Expanded(
                                   child: Text(
                                     _selectedDate != null
@@ -433,14 +440,14 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                                       color: _selectedDate != null
                                           ? NexoraColors.textPrimary
                                           : NexoraColors.textMuted,
-                                      fontSize: 15,
+                                      fontSize: 15.sp,
                                     ),
                                   ),
                                 ),
                                 Icon(
                                   Icons.calendar_today_outlined,
                                   color: NexoraColors.textMuted,
-                                  size: 20,
+                                  size: 20.r,
                                 ),
                               ],
                             ),
@@ -451,7 +458,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
                         // Gender
                         _buildLabel('Gender'),
-                        const SizedBox(height: 8),
+                        SizedBox(height: 8.h),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
@@ -465,17 +472,17 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                               value: _selectedGender,
                               hint: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.wc_outlined,
                                     color: NexoraColors.primaryPurple,
-                                    size: 22,
+                                    size: 22.r,
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12.w),
                                   Text(
                                     'Select your gender',
                                     style: TextStyle(
                                       color: NexoraColors.textMuted,
-                                      fontSize: 15,
+                                      fontSize: 15.sp,
                                     ),
                                   ),
                                 ],
@@ -490,17 +497,17 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                                   value: gender,
                                   child: Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.wc_outlined,
                                         color: NexoraColors.primaryPurple,
-                                        size: 22,
+                                        size: 22.r,
                                       ),
-                                      const SizedBox(width: 12),
+                                      SizedBox(width: 12.w),
                                       Text(
                                         gender,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: NexoraColors.textPrimary,
-                                          fontSize: 15,
+                                          fontSize: 15.sp,
                                         ),
                                       ),
                                     ],
@@ -516,25 +523,26 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        SizedBox(height: 24.h),
 
                         // VJEC Student Toggle
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: EdgeInsets.all(16.w),
                           decoration: BoxDecoration(
                             color: NexoraColors.glassBackground,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(14.r),
                             border: Border.all(
                               color: _isVjecStudent
                                   ? NexoraColors.primaryPurple.withOpacity(0.5)
                                   : NexoraColors.glassBorder,
+                              width: 1.w,
                             ),
                           ),
                           child: Row(
                             children: [
                               Container(
-                                width: 44,
-                                height: 44,
+                                width: 44.r,
+                                height: 44.r,
                                 decoration: BoxDecoration(
                                   gradient: _isVjecStudent
                                       ? NexoraGradients.primaryButton
@@ -542,35 +550,35 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                                   color: _isVjecStudent
                                       ? null
                                       : NexoraColors.glassBorder,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(12.r),
                                 ),
                                 child: Icon(
                                   Icons.school_rounded,
                                   color: _isVjecStudent
                                       ? Colors.white
                                       : NexoraColors.textMuted,
-                                  size: 24,
+                                  size: 24.r,
                                 ),
                               ),
-                              const SizedBox(width: 14),
+                              SizedBox(width: 14.w),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                       'Are you a VJEC student?',
                                       style: TextStyle(
                                         color: NexoraColors.textPrimary,
-                                        fontSize: 15,
+                                        fontSize: 15.sp,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2.h),
                                     Text(
                                       'Get verified student badge',
                                       style: TextStyle(
                                         color: NexoraColors.textMuted,
-                                        fontSize: 12,
+                                        fontSize: 12.sp,
                                       ),
                                     ),
                                   ],
@@ -596,7 +604,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 28),
+                  SizedBox(height: 28.h),
 
                   // Create Account Button
                   _buildPrimaryButton(
@@ -612,7 +620,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                       'By creating an account, you agree to our\nTerms of Service and Privacy Policy',
                       style: TextStyle(
                         color: NexoraColors.textMuted,
-                        fontSize: 12,
+                        fontSize: 12.sp,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -631,9 +639,9 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   Widget _buildLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         color: NexoraColors.textPrimary,
-        fontSize: 14,
+        fontSize: 14.sp,
         fontWeight: FontWeight.w600,
       ),
     );
@@ -647,7 +655,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   }) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: NexoraColors.textPrimary, fontSize: 15),
+      style: TextStyle(color: NexoraColors.textPrimary, fontSize: 15.sp),
       validator: validator,
       decoration: InputDecoration(
         hintText: hintText,
@@ -657,38 +665,29 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         prefixIcon: Icon(
           prefixIcon,
           color: NexoraColors.primaryPurple,
-          size: 22,
+          size: 22.r,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: NexoraColors.glassBorder),
+          borderRadius: BorderRadius.circular(14.r),
+          borderSide: BorderSide(color: NexoraColors.glassBorder, width: 1.w),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: NexoraColors.glassBorder),
+          borderRadius: BorderRadius.circular(14.r),
+          borderSide: BorderSide(color: NexoraColors.glassBorder, width: 1.w),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: NexoraColors.primaryPurple,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(14.r),
+          borderSide: BorderSide(color: NexoraColors.primaryPurple, width: 2.w),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: NexoraColors.romanticPink),
+          borderRadius: BorderRadius.circular(14.r),
+          borderSide: BorderSide(color: NexoraColors.romanticPink, width: 1.w),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(
-            color: NexoraColors.romanticPink,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(14.r),
+          borderSide: BorderSide(color: NexoraColors.romanticPink, width: 2.w),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       ),
     );
   }
@@ -703,27 +702,27 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       child: GestureDetector(
         onTap: isLoading ? null : onPressed,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: EdgeInsets.symmetric(vertical: 16.h),
           decoration: BoxDecoration(
             gradient: NexoraGradients.primaryButton,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16.r),
             boxShadow: [NexoraShadows.purpleGlow],
           ),
           child: Center(
             child: isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
+                ? SizedBox(
+                    width: 24.r,
+                    height: 24.r,
+                    child: const CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2.5,
                     ),
                   )
                 : Text(
                     text,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

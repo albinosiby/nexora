@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/services/dummy_database.dart';
+import '../repositories/user_repository.dart';
+import '../models/profile_model.dart';
 import '../../auth/screens/login_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../widgets/spotify_search_modal.dart';
+import '../../../../core/services/spotify_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,24 +20,26 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  final DummyDatabase _db = DummyDatabase.instance;
+  final UserRepository _userRepo = UserRepository.instance;
 
-  String get userName => _db.currentUser.value.name;
-  String get userDisplayName => _db.currentUser.value.displayName;
-  String get userBio => _db.currentUser.value.bio;
-  String get userYear => _db.currentUser.value.year;
-  String get userMajor => _db.currentUser.value.major;
+  ProfileModel get profile => _userRepo.currentUser;
 
-  // Spotify anthem from database
+  String get userName => profile.name;
+  String get userDisplayName => profile.displayName;
+  String get userBio => profile.bio;
+  String get userYear => profile.year;
+  String get userMajor => profile.major;
+
+  // Spotify anthem from repository
   Map<String, String> get spotifyAnthem => {
-    'title': _db.currentUser.value.spotifyTrackName ?? 'No track',
-    'artist': _db.currentUser.value.spotifyArtist ?? 'Unknown',
+    'title': profile.spotifyTrackName ?? 'No track',
+    'artist': profile.spotifyArtist ?? 'Unknown',
     'albumArt':
         'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
   };
 
   // Avatar customization options
-  String avatarSeed = 'Alex Chen';
+  String avatarSeed = '';
   String avatarStyle = 'avataaars';
 
   late AnimationController _animController;
@@ -75,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       'F1': '🏎️',
     };
 
-    return _db.currentUser.value.interests.map((interest) {
+    return profile.interests.map((interest) {
       return {'emoji': interestEmojis[interest] ?? '⭐', 'label': interest};
     }).toList();
   }
@@ -109,17 +116,18 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      avatarSeed = prefs.getString('avatarSeed') ?? _db.currentUser.value.name;
-      avatarStyle = prefs.getString('avatarStyle') ?? 'avataaars';
+      avatarSeed = profile.avatarSeed;
+      avatarStyle = profile.avatarStyle;
     });
   }
 
   Future<void> _saveAvatarPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('avatarSeed', avatarSeed);
-    await prefs.setString('avatarStyle', avatarStyle);
+    final updatedProfile = profile.copyWith(
+      avatarSeed: avatarSeed,
+      avatarStyle: avatarStyle,
+    );
+    await _userRepo.updateProfile(updatedProfile);
   }
 
   String get avatarUrl {
@@ -133,26 +141,29 @@ class _ProfileScreenState extends State<ProfileScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.transparent,
         content: GlassContainer(
-          borderRadius: 24,
-          padding: const EdgeInsets.all(20),
+          borderRadius: 24.r,
+          padding: EdgeInsets.all(20.w),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.logout, color: NexoraColors.error, size: 50),
-              const SizedBox(height: 16),
-              const Text(
+              Icon(Icons.logout, color: NexoraColors.error, size: 50.r),
+              SizedBox(height: 16.h),
+              Text(
                 'Logout',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 24.sp,
                   fontWeight: FontWeight.bold,
                   color: NexoraColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8.h),
               Text(
                 'Are you sure you want to logout?',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: NexoraColors.textSecondary),
+                style: TextStyle(
+                  color: NexoraColors.textSecondary,
+                  fontSize: 14.sp,
+                ),
               ),
               const SizedBox(height: 20),
               Row(
@@ -243,13 +254,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                         onPressed: () => Navigator.pop(context),
                         child: Text(
                           'Cancel',
-                          style: TextStyle(color: NexoraColors.textSecondary),
+                          style: TextStyle(
+                            color: NexoraColors.textSecondary,
+                            fontSize: 14.sp,
+                          ),
                         ),
                       ),
-                      const Text(
+                      Text(
                         'Edit Avatar',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 18.sp,
                           fontWeight: FontWeight.bold,
                           color: NexoraColors.textPrimary,
                         ),
@@ -282,8 +296,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                 // Avatar Preview
                 Container(
-                  width: 150,
-                  height: 150,
+                  width: 150.r,
+                  height: 150.r,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -296,7 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: NexoraColors.primaryPurple.withOpacity(0.5),
-                      width: 3,
+                      width: 3.w,
                     ),
                   ),
                   child: ClipOval(
@@ -305,17 +319,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
-                        return const Center(
+                        return Center(
                           child: CircularProgressIndicator(
                             color: NexoraColors.primaryPurple,
+                            strokeWidth: 3.w,
                           ),
                         );
                       },
                       errorBuilder: (context, error, stackTrace) => Center(
                         child: Text(
                           tempSeed.isNotEmpty ? tempSeed[0].toUpperCase() : 'U',
-                          style: const TextStyle(
-                            fontSize: 44,
+                          style: TextStyle(
+                            fontSize: 44.sp,
                             color: NexoraColors.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
@@ -327,7 +342,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                 // Randomize button
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
                   child: GestureDetector(
                     onTap: () {
                       setSheetState(() {
@@ -336,26 +351,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                       });
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20.w,
+                        vertical: 10.h,
                       ),
                       decoration: BoxDecoration(
                         gradient: NexoraGradients.primaryButton,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(20.r),
                         boxShadow: [
                           BoxShadow(
                             color: NexoraColors.primaryPurple.withOpacity(0.3),
-                            blurRadius: 10,
+                            blurRadius: 10.r,
                           ),
                         ],
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.shuffle, color: Colors.white, size: 18),
-                          SizedBox(width: 8),
-                          Text(
+                          Icon(Icons.shuffle, color: Colors.white, size: 18.r),
+                          SizedBox(width: 8.w),
+                          const Text(
                             'Randomize',
                             style: TextStyle(
                               color: Colors.white,
@@ -371,14 +386,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                 // Options
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: EdgeInsets.symmetric(horizontal: 20.w),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Style selector
                         _buildSectionTitle('Avatar Style'),
                         SizedBox(
-                          height: 50,
+                          height: 50.h,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: avatarStyles.length,
@@ -392,10 +407,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   });
                                 },
                                 child: Container(
-                                  margin: const EdgeInsets.only(right: 10),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
+                                  margin: EdgeInsets.only(right: 10.w),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 16.w,
+                                    vertical: 8.h,
                                   ),
                                   decoration: BoxDecoration(
                                     gradient: isSelected
@@ -404,11 +419,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     color: isSelected
                                         ? null
                                         : NexoraColors.cardBackground,
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(20.r),
                                     border: Border.all(
                                       color: isSelected
                                           ? Colors.transparent
                                           : NexoraColors.cardBorder,
+                                      width: 1.w,
                                     ),
                                   ),
                                   child: Center(
@@ -421,6 +437,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         fontWeight: isSelected
                                             ? FontWeight.bold
                                             : FontWeight.normal,
+                                        fontSize: 14.sp,
                                       ),
                                     ),
                                   ),
@@ -445,11 +462,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: 12.h),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 14,
+        style: TextStyle(
+          fontSize: 14.sp,
           fontWeight: FontWeight.w600,
           color: NexoraColors.textSecondary,
         ),
@@ -461,666 +478,731 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Animated background gradients
-          Positioned.fill(
-            child: Stack(
-              children: [
-                Positioned(
-                  top: -100,
-                  right: -100,
-                  child: Container(
-                    width: 300,
-                    height: 300,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          NexoraColors.primaryPurple.withOpacity(0.2),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 100,
-                  left: -50,
-                  child: Container(
-                    width: 200,
-                    height: 200,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          NexoraColors.romanticPink.withOpacity(0.1),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
+      body: Obx(
+        () => Stack(
+          children: [
+            // Animated background gradients
+            Positioned.fill(
+              child: Stack(
                 children: [
-                  const SizedBox(height: 20),
-
-                  // Profile Header with Animation
-                  SlideTransition(
-                    position:
-                        Tween<Offset>(
-                          begin: const Offset(0, 0.3),
-                          end: Offset.zero,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: _animController,
-                            curve: Curves.easeOutCubic,
-                          ),
+                  Positioned(
+                    top: -100.h,
+                    right: -100.w,
+                    child: Container(
+                      width: 300.r,
+                      height: 300.r,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            NexoraColors.primaryPurple.withOpacity(0.2),
+                            Colors.transparent,
+                          ],
                         ),
-                    child: FadeTransition(
-                      opacity: _animController,
-                      child: Center(
-                        child: Column(
-                          children: [
-                            // Profile Avatar with Glow
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Glow effect
-                                Container(
-                                  width: 130,
-                                  height: 130,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: NexoraColors.primaryPurple
-                                            .withOpacity(0.4),
-                                        blurRadius: 30,
-                                        spreadRadius: 5,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Avataaars Avatar
-                                Container(
-                                  width: 120,
-                                  height: 120,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        NexoraColors.primaryPurple.withOpacity(
-                                          0.3,
-                                        ),
-                                        NexoraColors.romanticPink.withOpacity(
-                                          0.2,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 100.h,
+                    left: -50.w,
+                    child: Container(
+                      width: 200.r,
+                      height: 200.r,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            NexoraColors.romanticPink.withOpacity(0.1),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.all(20.w),
+                child: Column(
+                  children: [
+                    SizedBox(height: 20.h),
+
+                    // Profile Header with Animation
+                    SlideTransition(
+                      position:
+                          Tween<Offset>(
+                            begin: const Offset(0, 0.3),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: _animController,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          ),
+                      child: FadeTransition(
+                        opacity: _animController,
+                        child: Center(
+                          child: Column(
+                            children: [
+                              // Profile Avatar with Glow
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // Glow effect
+                                  Container(
+                                    width: 130.r,
+                                    height: 130.r,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: NexoraColors.primaryPurple
+                                              .withOpacity(0.4),
+                                          blurRadius: 30.r,
+                                          spreadRadius: 5.r,
                                         ),
                                       ],
                                     ),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: NexoraColors.primaryPurple
-                                          .withOpacity(0.5),
-                                      width: 3,
-                                    ),
                                   ),
-                                  child: ClipOval(
-                                    child: Image.network(
-                                      avatarUrl,
-                                      fit: BoxFit.cover,
-                                      loadingBuilder:
-                                          (context, child, loadingProgress) {
-                                            if (loadingProgress == null)
-                                              return child;
-                                            return Center(
+                                  // Avataaars Avatar
+                                  Container(
+                                    width: 120.r,
+                                    height: 120.r,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          NexoraColors.primaryPurple
+                                              .withOpacity(0.3),
+                                          NexoraColors.romanticPink.withOpacity(
+                                            0.2,
+                                          ),
+                                        ],
+                                      ),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: NexoraColors.primaryPurple
+                                            .withOpacity(0.5),
+                                        width: 3.w,
+                                      ),
+                                    ),
+                                    child: ClipOval(
+                                      child: Image.network(
+                                        avatarUrl,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder:
+                                            (context, child, loadingProgress) {
+                                              if (loadingProgress == null)
+                                                return child;
+                                              return Center(
+                                                child: Text(
+                                                  userName[0].toUpperCase(),
+                                                  style: TextStyle(
+                                                    fontSize: 44.sp,
+                                                    color: NexoraColors
+                                                        .textPrimary,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                        errorBuilder:
+                                            (
+                                              context,
+                                              error,
+                                              stackTrace,
+                                            ) => Center(
                                               child: Text(
                                                 userName[0].toUpperCase(),
-                                                style: const TextStyle(
-                                                  fontSize: 44,
+                                                style: TextStyle(
+                                                  fontSize: 44.sp,
                                                   color:
                                                       NexoraColors.textPrimary,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
-                                            );
-                                          },
-                                      errorBuilder:
-                                          (
-                                            context,
-                                            error,
-                                            stackTrace,
-                                          ) => Center(
-                                            child: Text(
-                                              userName[0].toUpperCase(),
-                                              style: const TextStyle(
-                                                fontSize: 44,
-                                                color: NexoraColors.textPrimary,
-                                                fontWeight: FontWeight.bold,
-                                              ),
                                             ),
-                                          ),
-                                    ),
-                                  ),
-                                ),
-                                // Edit avatar button
-                                Positioned(
-                                  top: 0,
-                                  right: 0,
-                                  child: GestureDetector(
-                                    onTap: _showAvatarEditor,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        gradient: NexoraGradients.primaryButton,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: NexoraColors.midnightDark,
-                                          width: 2,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: NexoraColors.primaryPurple
-                                                .withOpacity(0.5),
-                                            blurRadius: 10,
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(
-                                        Icons.edit,
-                                        color: Colors.white,
-                                        size: 16,
                                       ),
                                     ),
                                   ),
-                                ),
-                                // Verified badge
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      gradient: NexoraGradients.cyanAccent,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: NexoraColors.midnightDark,
-                                        width: 3,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.check,
-                                      color: Colors.white,
-                                      size: 14,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 20),
-
-                            // Name with sparkle
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  userName,
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: NexoraColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text('✨', style: TextStyle(fontSize: 20)),
-                              ],
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            // Year & Major badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    NexoraColors.primaryPurple.withOpacity(0.2),
-                                    NexoraColors.romanticPink.withOpacity(0.1),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: NexoraColors.primaryPurple.withOpacity(
-                                    0.3,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                '$userYear • $userMajor',
-                                style: const TextStyle(
-                                  color: NexoraColors.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // Bio Section
-                  _buildSection(
-                    title: 'About Me',
-                    icon: Icons.edit_note,
-                    child: GlassContainer(
-                      borderRadius: 20,
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        userBio,
-                        style: const TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontSize: 15,
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Spotify Anthem Section
-                  _buildSection(
-                    title: 'On Repeat',
-                    icon: Icons.music_note_rounded,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFF1DB954).withOpacity(0.15),
-                            NexoraColors.glassBackground,
-                            NexoraColors.primaryPurple.withOpacity(0.08),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: const Color(0xFF1DB954).withOpacity(0.2),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1DB954).withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Stack(
-                          children: [
-                            // Background blur effect
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                    colors: [
-                                      Colors.white.withOpacity(0.05),
-                                      Colors.transparent,
-                                      Colors.white.withOpacity(0.03),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Content
-                            Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(
-                                children: [
-                                  // Album art with glass frame
-                                  Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Colors.white.withOpacity(0.3),
-                                          Colors.white.withOpacity(0.1),
-                                        ],
-                                      ),
-                                    ),
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Container(
-                                          width: 52,
-                                          height: 52,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              11,
-                                            ),
+                                  // Edit avatar button
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: GestureDetector(
+                                      onTap: _showAvatarEditor,
+                                      child: Container(
+                                        padding: EdgeInsets.all(8.r),
+                                        decoration: BoxDecoration(
+                                          gradient:
+                                              NexoraGradients.primaryButton,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: NexoraColors.midnightDark,
+                                            width: 2.w,
                                           ),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              11,
-                                            ),
-                                            child: Image.network(
-                                              spotifyAnthem['albumArt']!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return Container(
-                                                      decoration: BoxDecoration(
-                                                        gradient:
-                                                            LinearGradient(
-                                                              colors: [
-                                                                const Color(
-                                                                  0xFF1DB954,
-                                                                ),
-                                                                const Color(
-                                                                  0xFF1DB954,
-                                                                ).withOpacity(
-                                                                  0.7,
-                                                                ),
-                                                              ],
-                                                            ),
-                                                      ),
-                                                      child: const Icon(
-                                                        Icons
-                                                            .music_note_rounded,
-                                                        color: Colors.white,
-                                                        size: 24,
-                                                      ),
-                                                    );
-                                                  },
-                                            ),
-                                          ),
-                                        ),
-                                        // Frosted play button
-                                        Container(
-                                          width: 26,
-                                          height: 26,
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(
-                                              0.4,
-                                            ),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white.withOpacity(
-                                                0.3,
-                                              ),
-                                              width: 1.5,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.play_arrow_rounded,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  // Song info
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          spotifyAnthem['title']!,
-                                          style: const TextStyle(
-                                            color: NexoraColors.textPrimary,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.2,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Container(
-                                              width: 14,
-                                              height: 14,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF1DB954),
-                                                borderRadius:
-                                                    BorderRadius.circular(3),
-                                              ),
-                                              child: const Icon(
-                                                Icons.music_note,
-                                                color: Colors.white,
-                                                size: 10,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                spotifyAnthem['artist']!,
-                                                style: TextStyle(
-                                                  color: NexoraColors.textMuted,
-                                                  fontSize: 13,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: NexoraColors.primaryPurple
+                                                  .withOpacity(0.5),
+                                              blurRadius: 10.r,
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Animated bars indicator
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.1),
+                                        child: Icon(
+                                          Icons.edit,
+                                          color: Colors.white,
+                                          size: 16.r,
+                                        ),
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _buildMusicBar(8),
-                                        const SizedBox(width: 2),
-                                        _buildMusicBar(14),
-                                        const SizedBox(width: 2),
-                                        _buildMusicBar(10),
-                                        const SizedBox(width: 2),
-                                        _buildMusicBar(16),
-                                      ],
+                                  ),
+                                  // Verified badge
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        gradient: NexoraGradients.cyanAccent,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: NexoraColors.midnightDark,
+                                          width: 3,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.check,
+                                        color: Colors.white,
+                                        size: 14.r,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
+
+                              const SizedBox(height: 20),
+
+                              // Name with sparkle
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    userName,
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: NexoraColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    '✨',
+                                    style: TextStyle(fontSize: 20),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 4),
+
+                              // Username
+                              Text(
+                                '@${profile.displayName}',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: NexoraColors.textMuted,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+
+                              const SizedBox(height: 6),
+
+                              // Year & Major badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      NexoraColors.primaryPurple.withOpacity(
+                                        0.2,
+                                      ),
+                                      NexoraColors.romanticPink.withOpacity(
+                                        0.1,
+                                      ),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: NexoraColors.primaryPurple
+                                        .withOpacity(0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  '$userYear • $userMajor',
+                                  style: const TextStyle(
+                                    color: NexoraColors.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // Bio Section
+                    _buildSection(
+                      title: 'About Me',
+                      icon: Icons.edit_note,
+                      child: GlassContainer(
+                        borderRadius: 20,
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          userBio,
+                          style: const TextStyle(
+                            color: NexoraColors.textPrimary,
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Spotify Anthem Section
+                    _buildSection(
+                      title: 'On Repeat',
+                      icon: Icons.music_note_rounded,
+                      child: GestureDetector(
+                        onTap: () async {
+                          // Try to open Spotify app first, then fall back to web search
+                          final trackName =
+                              profile.spotifyTrackName ?? 'Blinding Lights';
+                          final artistName =
+                              profile.spotifyArtist ?? 'The Weeknd';
+                          final searchQuery = Uri.encodeComponent(
+                            '$trackName $artistName',
+                          );
+                          final spotifyUri = Uri.parse(
+                            'spotify:search:$searchQuery',
+                          );
+                          final spotifyWebUri = Uri.parse(
+                            'https://open.spotify.com/search/$searchQuery',
+                          );
+
+                          if (await canLaunchUrl(spotifyUri)) {
+                            await launchUrl(spotifyUri);
+                          } else {
+                            await launchUrl(
+                              spotifyWebUri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20.r),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                const Color(0xFF1DB954).withOpacity(0.15),
+                                NexoraColors.glassBackground,
+                                NexoraColors.primaryPurple.withOpacity(0.08),
+                              ],
+                            ),
+                            border: Border.all(
+                              color: const Color(0xFF1DB954).withOpacity(0.2),
+                              width: 1.w,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1DB954).withOpacity(0.1),
+                                blurRadius: 20.r,
+                                offset: Offset(0, 4.h),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Stack(
+                              children: [
+                                // Background blur effect
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [
+                                          Colors.white.withOpacity(0.05),
+                                          Colors.transparent,
+                                          Colors.white.withOpacity(0.03),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Content
+                                Padding(
+                                  padding: EdgeInsets.all(14.w),
+                                  child: Row(
+                                    children: [
+                                      // Album art with glass frame
+                                      Container(
+                                        padding: EdgeInsets.all(3.r),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            14.r,
+                                          ),
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Colors.white.withOpacity(0.3),
+                                              Colors.white.withOpacity(0.1),
+                                            ],
+                                          ),
+                                        ),
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            Container(
+                                              width: 52.r,
+                                              height: 52.r,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(11.r),
+                                              ),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(11.r),
+                                                child: Image.network(
+                                                  spotifyAnthem['albumArt']!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) {
+                                                        return Container(
+                                                          decoration: BoxDecoration(
+                                                            gradient:
+                                                                LinearGradient(
+                                                                  colors: [
+                                                                    const Color(
+                                                                      0xFF1DB954,
+                                                                    ),
+                                                                    const Color(
+                                                                      0xFF1DB954,
+                                                                    ).withOpacity(
+                                                                      0.7,
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                          ),
+                                                          child: Icon(
+                                                            Icons
+                                                                .music_note_rounded,
+                                                            color: Colors.white,
+                                                            size: 24.r,
+                                                          ),
+                                                        );
+                                                      },
+                                                ),
+                                              ),
+                                            ),
+                                            // Frosted play button
+                                            Container(
+                                              width: 26.r,
+                                              height: 26.r,
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(
+                                                  0.4,
+                                                ),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: Colors.white
+                                                      .withOpacity(0.3),
+                                                  width: 1.5.w,
+                                                ),
+                                              ),
+                                              child: Icon(
+                                                Icons.play_arrow_rounded,
+                                                color: Colors.white,
+                                                size: 16.r,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      // Song info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              spotifyAnthem['title']!,
+                                              style: TextStyle(
+                                                color: NexoraColors.textPrimary,
+                                                fontSize: 15.sp,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.2.w,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            SizedBox(height: 4.h),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  width: 14.r,
+                                                  height: 14.r,
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFF1DB954,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          3.r,
+                                                        ),
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.music_note,
+                                                    color: Colors.white,
+                                                    size: 10.r,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    spotifyAnthem['artist']!,
+                                                    style: TextStyle(
+                                                      color: NexoraColors
+                                                          .textMuted,
+                                                      fontSize: 13.sp,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Animated bars indicator
+                                      Container(
+                                        padding: EdgeInsets.all(8.r),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            10.r,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white.withOpacity(
+                                              0.1,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _buildMusicBar(8),
+                                            const SizedBox(width: 2),
+                                            _buildMusicBar(14),
+                                            const SizedBox(width: 2),
+                                            _buildMusicBar(10),
+                                            const SizedBox(width: 2),
+                                            _buildMusicBar(16),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Stats Section with Glass Effect
+                    GlassContainer(
+                      borderRadius: 24.r,
+                      padding: EdgeInsets.symmetric(vertical: 20.h),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatItem(
+                            'Posts',
+                            '${profile.posts}',
+                            NexoraColors.romanticPink,
+                          ),
+                          _buildDivider(),
+                          _buildStatItem(
+                            'Connections',
+                            '${profile.connections}',
+                            NexoraColors.accentCyan,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Interests Section
+                    _buildSection(
+                      title: 'Interests',
+                      icon: Icons.favorite_outline,
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: interests.map((interest) {
+                          return Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 14.w,
+                              vertical: 10.h,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  NexoraColors.glassBackground,
+                                  NexoraColors.primaryPurple.withOpacity(0.1),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: NexoraColors.glassBorder,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  interest['emoji']!,
+                                  style: TextStyle(fontSize: 16.sp),
+                                ),
+                                SizedBox(width: 6.w),
+                                Text(
+                                  interest['label']!,
+                                  style: TextStyle(
+                                    color: NexoraColors.textPrimary,
+                                    fontSize: 13.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Looking For Section
+                    _buildSection(
+                      title: 'Looking For',
+                      icon: Icons.search_outlined,
+                      child: GlassContainer(
+                        borderRadius: 20,
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(10.r),
+                              decoration: BoxDecoration(
+                                gradient: NexoraGradients.romanticGlow,
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              child: Icon(
+                                Icons.favorite,
+                                color: Colors.white,
+                                size: 20.r,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                profile.lookingFor ??
+                                    'Looking for connections 💜',
+                                style: TextStyle(
+                                  color: NexoraColors.textPrimary,
+                                  fontSize: 15.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-                  // Stats Section with Glass Effect
-                  GlassContainer(
-                    borderRadius: 24,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildStatItem(
-                          'Posts',
-                          '24',
-                          NexoraColors.romanticPink,
-                        ),
-                        _buildDivider(),
-                        _buildStatItem(
-                          'Connections',
-                          '128',
-                          NexoraColors.accentCyan,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Interests Section
-                  _buildSection(
-                    title: 'Interests',
-                    icon: Icons.favorite_outline,
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: interests.map((interest) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                NexoraColors.glassBackground,
-                                NexoraColors.primaryPurple.withOpacity(0.1),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: NexoraColors.glassBorder),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                interest['emoji']!,
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                interest['label']!,
-                                style: const TextStyle(
-                                  color: NexoraColors.textPrimary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Looking For Section
-                  _buildSection(
-                    title: 'Looking For',
-                    icon: Icons.search_outlined,
-                    child: GlassContainer(
-                      borderRadius: 20,
-                      padding: const EdgeInsets.all(16),
+                    // Logout Button
+                    TextButton(
+                      onPressed: _logout,
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: NexoraGradients.romanticGlow,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.favorite,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                          Icon(
+                            Icons.logout,
+                            color: NexoraColors.textMuted,
+                            size: 18.r,
                           ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Text(
-                              'Something meaningful 💜',
-                              style: TextStyle(
-                                color: NexoraColors.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          SizedBox(width: 8.w),
+                          Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: NexoraColors.textMuted,
+                              fontSize: 14.sp,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 30),
 
-                  // Logout Button
-                  TextButton(
-                    onPressed: _logout,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.logout,
-                          color: NexoraColors.textMuted,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                    // App Version
+                    Text(
+                      'NEXORA v1.0.0',
+                      style: TextStyle(
+                        color: NexoraColors.textMuted.withOpacity(0.5),
+                        fontSize: 10.sp,
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 30),
-
-                  // App Version
-                  Text(
-                    'NEXORA v1.0.0',
-                    style: TextStyle(
-                      color: NexoraColors.textMuted.withOpacity(0.5),
-                      fontSize: 10,
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-                ],
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1198,18 +1280,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
 // Enhanced Edit Profile Screen with animations, profile completion, and more
 class EditProfileScreen extends StatefulWidget {
-  final String currentName;
-  final String currentBio;
-  final String currentYear;
-  final String currentMajor;
+  final ProfileModel profile;
 
-  const EditProfileScreen({
-    required this.currentName,
-    required this.currentBio,
-    required this.currentYear,
-    required this.currentMajor,
-    super.key,
-  });
+  const EditProfileScreen({required this.profile, super.key});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -1223,6 +1296,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   late TextEditingController majorController;
   late TextEditingController instagramController;
   late TextEditingController spotifyController;
+  late TextEditingController spotifyTrackController;
+  late TextEditingController spotifyArtistController;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -1235,7 +1310,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   List<String> selectedInterests = [];
 
   // Looking for option
-  String lookingFor = 'Something meaningful 💜';
+  String selectedLookingFor = 'Something meaningful 💜';
 
   String get avatarUrl {
     final seed = avatarSeed.isNotEmpty ? avatarSeed : nameController.text;
@@ -1339,12 +1414,28 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   @override
   void initState() {
     super.initState();
-    nameController = TextEditingController(text: widget.currentName);
-    bioController = TextEditingController(text: widget.currentBio);
-    yearController = TextEditingController(text: widget.currentYear);
-    majorController = TextEditingController(text: widget.currentMajor);
-    instagramController = TextEditingController();
-    spotifyController = TextEditingController();
+    nameController = TextEditingController(text: widget.profile.name);
+    bioController = TextEditingController(text: widget.profile.bio);
+    yearController = TextEditingController(text: widget.profile.year);
+    majorController = TextEditingController(text: widget.profile.major);
+    instagramController = TextEditingController(
+      text: widget.profile.instagram ?? '',
+    );
+    spotifyController = TextEditingController(
+      text: widget.profile.spotify ?? '',
+    );
+    spotifyTrackController = TextEditingController(
+      text: widget.profile.spotifyTrackName ?? '',
+    );
+    spotifyArtistController = TextEditingController(
+      text: widget.profile.spotifyArtist ?? '',
+    );
+
+    // Initialize from profile
+    avatarSeed = widget.profile.avatarSeed;
+    avatarStyle = widget.profile.avatarStyle;
+    selectedInterests = List.from(widget.profile.interests);
+    selectedLookingFor = widget.profile.lookingFor ?? 'Something meaningful 💜';
 
     // Initialize animations
     _animController = AnimationController(
@@ -1360,7 +1451,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
         );
 
-    _loadPreferences();
     _animController.forward();
 
     // Add listeners for profile completion updates
@@ -1370,47 +1460,38 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   void _updateState() => setState(() {});
 
-  Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      avatarSeed = prefs.getString('avatarSeed') ?? widget.currentName;
-      avatarStyle = prefs.getString('avatarStyle') ?? 'avataaars';
-
-      // Load saved interests
-      final savedInterests = prefs.getStringList('userInterests');
-      if (savedInterests != null) {
-        selectedInterests = savedInterests;
-      } else {
-        selectedInterests = ['Coding', 'Gaming', 'Music'];
-      }
-
-      // Load social links
-      instagramController.text = prefs.getString('instagram') ?? '';
-      spotifyController.text = prefs.getString('spotify') ?? '';
-      lookingFor = prefs.getString('lookingFor') ?? 'Something meaningful 💜';
-    });
-  }
+  // Removed _loadPreferences to use widget.profile exclusively
 
   Future<void> _saveProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('userName', nameController.text);
-    await prefs.setStringList('userInterests', selectedInterests);
-    await prefs.setString('instagram', instagramController.text);
-    await prefs.setString('spotify', spotifyController.text);
-    await prefs.setString('lookingFor', lookingFor);
+    final String name = nameController.text;
+    final String bio = bioController.text;
+    final String year = yearController.text;
+    final String major = majorController.text;
+    final String instagram = instagramController.text;
+    final String spotify = spotifyController.text;
+    final String spotifyTrack = spotifyTrackController.text;
+    final String spotifyArtist = spotifyArtistController.text;
+    final String looking = selectedLookingFor;
 
-    Get.back(
-      result: {
-        'name': nameController.text,
-        'bio': bioController.text,
-        'year': yearController.text,
-        'major': majorController.text,
-        'interests': selectedInterests,
-        'instagram': instagramController.text,
-        'spotify': spotifyController.text,
-        'lookingFor': lookingFor,
-      },
+    final updatedProfile = widget.profile.copyWith(
+      name: name,
+      bio: bio,
+      year: year,
+      major: major,
+      interests: selectedInterests,
+      instagram: instagram,
+      spotify: spotify,
+      spotifyTrackName: spotifyTrack,
+      spotifyArtist: spotifyArtist,
+      lookingFor: looking,
+      avatarSeed: avatarSeed,
+      avatarStyle: avatarStyle,
     );
+
+    // Update via repository (saves to Firestore and syncs RTDB)
+    await UserRepository.instance.updateProfile(updatedProfile);
+
+    Get.back(result: updatedProfile);
 
     Get.snackbar(
       'Profile Updated',
@@ -1419,10 +1500,27 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       colorText: Colors.white,
       snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 2),
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
+      margin: EdgeInsets.all(16.r),
+      borderRadius: 12.r,
       icon: const Icon(Icons.check_circle, color: Colors.white),
     );
+  }
+
+  Future<void> _showSpotifySearchModal() async {
+    final track = await showModalBottomSheet<SpotifyTrack>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const SpotifySearchModal(),
+    );
+
+    if (track != null) {
+      setState(() {
+        spotifyController.text = track.spotifyUrl;
+        spotifyTrackController.text = track.name;
+        spotifyArtistController.text = track.artist;
+      });
+    }
   }
 
   void _toggleInterest(String interest) {
@@ -1439,8 +1537,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           colorText: Colors.white,
           snackPosition: SnackPosition.TOP,
           duration: const Duration(seconds: 2),
-          margin: const EdgeInsets.all(16),
-          borderRadius: 12,
+          margin: EdgeInsets.all(16.r),
+          borderRadius: 12.r,
         );
       }
     });
@@ -1503,80 +1601,80 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       position: _slideAnimation,
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(20.w),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Profile Completion Card
                             _buildProfileCompletionCard(),
 
-                            const SizedBox(height: 24),
+                            SizedBox(height: 24.h),
 
                             // Profile Avatar Section
                             _buildAvatarSection(),
 
-                            const SizedBox(height: 32),
+                            SizedBox(height: 32.h),
 
                             // Basic Info Section
                             _buildSectionHeader(
                               'Basic Info',
                               Icons.person_outline,
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12.h),
                             _buildBasicInfoCard(),
 
-                            const SizedBox(height: 28),
+                            SizedBox(height: 28.h),
 
                             // Interests Section
                             _buildSectionHeader(
                               'Your Interests',
                               Icons.favorite_outline,
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8.h),
                             Text(
                               'Select up to 8 interests (${selectedInterests.length}/8)',
                               style: TextStyle(
                                 color: NexoraColors.textMuted,
-                                fontSize: 13,
+                                fontSize: 13.sp,
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12.h),
                             _buildInterestsGrid(),
 
-                            const SizedBox(height: 28),
+                            SizedBox(height: 28.h),
 
                             // Looking For Section
                             _buildSectionHeader(
                               'Looking For',
                               Icons.search_outlined,
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12.h),
                             _buildLookingForSection(),
 
-                            const SizedBox(height: 28),
+                            SizedBox(height: 28.h),
 
                             // Social Links Section
                             _buildSectionHeader(
                               'Connect Your Socials',
                               Icons.link,
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8.h),
                             Text(
                               'Let others discover you on other platforms',
                               style: TextStyle(
                                 color: NexoraColors.textMuted,
-                                fontSize: 13,
+                                fontSize: 13.sp,
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            SizedBox(height: 12.h),
                             _buildSocialLinksCard(),
 
-                            const SizedBox(height: 32),
+                            SizedBox(height: 32.h),
 
                             // Save Button
                             _buildSaveButton(),
 
-                            const SizedBox(height: 40),
+                            SizedBox(height: 40.h),
                           ],
                         ),
                       ),
@@ -1593,31 +1691,31 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Get.back(),
             icon: Container(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(8.r),
               decoration: BoxDecoration(
                 color: NexoraColors.glassBackground,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12.r),
                 border: Border.all(color: NexoraColors.glassBorder),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back_ios_new,
                 color: NexoraColors.textPrimary,
-                size: 18,
+                size: 18.r,
               ),
             ),
           ),
-          const Expanded(
+          Expanded(
             child: Text(
               'Edit Profile',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 20.sp,
                 fontWeight: FontWeight.bold,
                 color: NexoraColors.textPrimary,
               ),
@@ -1626,23 +1724,23 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           TextButton(
             onPressed: _saveProfile,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
               decoration: BoxDecoration(
                 gradient: NexoraGradients.primaryButton,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(20.r),
                 boxShadow: [
                   BoxShadow(
                     color: NexoraColors.primaryPurple.withOpacity(0.3),
-                    blurRadius: 8,
+                    blurRadius: 8.r,
                   ),
                 ],
               ),
-              child: const Text(
+              child: Text(
                 'Save',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                  fontSize: 14.sp,
                 ),
               ),
             ),
@@ -1657,29 +1755,29 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     final percentage = (completion * 100).round();
 
     return GlassContainer(
-      borderRadius: 20,
-      padding: const EdgeInsets.all(16),
+      borderRadius: 20.r,
+      padding: EdgeInsets.all(16.w),
       child: Column(
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(10.r),
                 decoration: BoxDecoration(
                   gradient: completion >= 1.0
                       ? const LinearGradient(
                           colors: [NexoraColors.success, Color(0xFF81C784)],
                         )
                       : NexoraGradients.primaryButton,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                 ),
                 child: Icon(
                   completion >= 1.0 ? Icons.check_circle : Icons.trending_up,
                   color: Colors.white,
-                  size: 20,
+                  size: 20.r,
                 ),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1688,19 +1786,19 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       completion >= 1.0
                           ? 'Profile Complete! 🎉'
                           : 'Complete Your Profile',
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: 16.sp,
                         fontWeight: FontWeight.bold,
                         color: NexoraColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2.h),
                     Text(
                       completion >= 1.0
                           ? 'You\'re ready to make connections!'
                           : 'Complete profiles get more visibility',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 12.sp,
                         color: NexoraColors.textMuted,
                       ),
                     ),
@@ -1715,8 +1813,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 ).createShader(bounds),
                 child: Text(
                   '$percentage%',
-                  style: const TextStyle(
-                    fontSize: 24,
+                  style: TextStyle(
+                    fontSize: 24.sp,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -1724,31 +1822,32 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14.h),
           // Progress bar
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
             child: Stack(
               children: [
                 Container(
-                  height: 8,
+                  height: 8.h,
                   decoration: BoxDecoration(
                     color: NexoraColors.cardBackground,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(10.r),
                   ),
                 ),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.easeOutCubic,
-                  height: 8,
-                  width: MediaQuery.of(context).size.width * completion * 0.85,
+                  height: 8.h,
+                  width:
+                      (1.sw * 0.85 * completion) - 40.w, // Adjusted for padding
                   decoration: BoxDecoration(
                     gradient: completion >= 1.0
                         ? const LinearGradient(
                             colors: [NexoraColors.success, Color(0xFF81C784)],
                           )
                         : NexoraGradients.logoGradient,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(10.r),
                   ),
                 ),
               ],
@@ -1768,23 +1867,23 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             children: [
               // Glow effect
               Container(
-                width: 130,
-                height: 130,
+                width: 130.r,
+                height: 130.r,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: NexoraColors.primaryPurple.withOpacity(0.4),
-                      blurRadius: 30,
-                      spreadRadius: 5,
+                      blurRadius: 30.r,
+                      spreadRadius: 5.r,
                     ),
                   ],
                 ),
               ),
               // Avatar
               Container(
-                width: 120,
-                height: 120,
+                width: 120.r,
+                height: 120.r,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -1797,7 +1896,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: NexoraColors.primaryPurple.withOpacity(0.5),
-                    width: 3,
+                    width: 3.w,
                   ),
                 ),
                 child: ClipOval(
@@ -1811,8 +1910,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                           nameController.text.isNotEmpty
                               ? nameController.text[0].toUpperCase()
                               : 'U',
-                          style: const TextStyle(
-                            fontSize: 44,
+                          style: TextStyle(
+                            fontSize: 44.sp,
                             color: NexoraColors.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1824,8 +1923,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         nameController.text.isNotEmpty
                             ? nameController.text[0].toUpperCase()
                             : 'U',
-                        style: const TextStyle(
-                          fontSize: 44,
+                        style: TextStyle(
+                          fontSize: 44.sp,
                           color: NexoraColors.textPrimary,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1855,35 +1954,35 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                     );
                   },
                   child: Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(
                       gradient: NexoraGradients.primaryButton,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: NexoraColors.midnightDark,
-                        width: 3,
+                        width: 3.w,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: NexoraColors.primaryPurple.withOpacity(0.5),
-                          blurRadius: 10,
+                          blurRadius: 10.r,
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.camera_alt,
                       color: Colors.white,
-                      size: 18,
+                      size: 18.r,
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
           Text(
             'Tap to change avatar',
-            style: TextStyle(color: NexoraColors.textMuted, fontSize: 13),
+            style: TextStyle(color: NexoraColors.textMuted, fontSize: 13.sp),
           ),
         ],
       ),
@@ -1894,19 +1993,19 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(8.r),
           decoration: BoxDecoration(
             color: NexoraColors.primaryPurple.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
           ),
-          child: Icon(icon, color: NexoraColors.primaryPurple, size: 18),
+          child: Icon(icon, color: NexoraColors.primaryPurple, size: 18.r),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: 10.w),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: NexoraColors.textPrimary,
-            fontSize: 18,
+            fontSize: 18.sp,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1916,8 +2015,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   Widget _buildBasicInfoCard() {
     return GlassContainer(
-      borderRadius: 24,
-      padding: const EdgeInsets.all(20),
+      borderRadius: 24.r,
+      padding: EdgeInsets.all(20.w),
       child: Column(
         children: [
           _buildTextField(
@@ -1926,7 +2025,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             icon: Icons.person_outline,
             hint: 'What should people call you?',
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20.h),
           _buildTextField(
             label: 'Bio',
             controller: bioController,
@@ -1935,7 +2034,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             hint: 'Tell others about yourself...',
             maxLength: 150,
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20.h),
           Row(
             children: [
               Expanded(
@@ -1951,7 +2050,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   },
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: 16.w),
               Expanded(
                 child: _buildDropdownField(
                   label: 'Major',
@@ -1974,22 +2073,22 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   Widget _buildInterestsGrid() {
     return GlassContainer(
-      borderRadius: 20,
-      padding: const EdgeInsets.all(16),
+      borderRadius: 20.r,
+      padding: EdgeInsets.all(16.w),
       child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
+        spacing: 10.w,
+        runSpacing: 10.h,
         children: allInterests.map((interest) {
           final isSelected = selectedInterests.contains(interest['label']);
           return GestureDetector(
             onTap: () => _toggleInterest(interest['label']!),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
               decoration: BoxDecoration(
                 gradient: isSelected ? NexoraGradients.primaryButton : null,
                 color: isSelected ? null : NexoraColors.cardBackground,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(20.r),
                 border: Border.all(
                   color: isSelected
                       ? Colors.transparent
@@ -2000,7 +2099,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                     ? [
                         BoxShadow(
                           color: NexoraColors.primaryPurple.withOpacity(0.3),
-                          blurRadius: 8,
+                          blurRadius: 8.r,
                         ),
                       ]
                     : null,
@@ -2008,26 +2107,23 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    interest['emoji']!,
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(width: 6),
+                  Text(interest['emoji']!, style: TextStyle(fontSize: 16.sp)),
+                  SizedBox(width: 6.w),
                   Text(
                     interest['label']!,
                     style: TextStyle(
                       color: isSelected
                           ? Colors.white
                           : NexoraColors.textSecondary,
-                      fontSize: 13,
+                      fontSize: 13.sp,
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.w500,
                     ),
                   ),
                   if (isSelected) ...[
-                    const SizedBox(width: 4),
-                    const Icon(Icons.check, color: Colors.white, size: 14),
+                    SizedBox(width: 4.w),
+                    Icon(Icons.check, color: Colors.white, size: 14.r),
                   ],
                 ],
               ),
@@ -2040,21 +2136,21 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   Widget _buildLookingForSection() {
     return GlassContainer(
-      borderRadius: 20,
-      padding: const EdgeInsets.all(16),
+      borderRadius: 20.r,
+      padding: EdgeInsets.all(16.w),
       child: Column(
         children: lookingForOptions.map((option) {
-          final isSelected = lookingFor == option['label'];
+          final isSelected = selectedLookingFor == option['label'];
           return GestureDetector(
             onTap: () {
               setState(() {
-                lookingFor = option['label'];
+                selectedLookingFor = option['label'];
               });
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(14),
+              margin: EdgeInsets.only(bottom: 10.h),
+              padding: EdgeInsets.all(14.w),
               decoration: BoxDecoration(
                 gradient: isSelected
                     ? LinearGradient(
@@ -2065,18 +2161,18 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                       )
                     : null,
                 color: isSelected ? null : NexoraColors.cardBackground,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(16.r),
                 border: Border.all(
                   color: isSelected
                       ? (option['color'] as Color).withOpacity(0.6)
                       : NexoraColors.cardBorder,
-                  width: isSelected ? 2 : 1,
+                  width: isSelected ? 2.w : 1.w,
                 ),
               ),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(8.r),
                     decoration: BoxDecoration(
                       gradient: isSelected
                           ? LinearGradient(
@@ -2087,15 +2183,15 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                             )
                           : null,
                       color: isSelected ? null : NexoraColors.cardBackground,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(10.r),
                     ),
                     child: Icon(
                       option['icon'],
                       color: isSelected ? Colors.white : NexoraColors.textMuted,
-                      size: 18,
+                      size: 18.r,
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: 14.w),
                   Expanded(
                     child: Text(
                       option['label'],
@@ -2103,7 +2199,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         color: isSelected
                             ? NexoraColors.textPrimary
                             : NexoraColors.textSecondary,
-                        fontSize: 15,
+                        fontSize: 15.sp,
                         fontWeight: isSelected
                             ? FontWeight.w600
                             : FontWeight.normal,
@@ -2112,16 +2208,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   ),
                   if (isSelected)
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: EdgeInsets.all(4.r),
                       decoration: BoxDecoration(
                         color: option['color'],
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 14,
-                      ),
+                      child: Icon(Icons.check, color: Colors.white, size: 14.r),
                     ),
                 ],
               ),
@@ -2134,8 +2226,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
   Widget _buildSocialLinksCard() {
     return GlassContainer(
-      borderRadius: 20,
-      padding: const EdgeInsets.all(20),
+      borderRadius: 20.r,
+      padding: EdgeInsets.all(20.w),
       child: Column(
         children: [
           _buildSocialField(
@@ -2146,13 +2238,47 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             prefix: '@',
             hint: 'username',
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
           _buildSocialField(
-            label: 'Spotify',
+            label: 'Spotify Profile URL',
             controller: spotifyController,
+            icon: Icons.link,
+            color: const Color(0xFF1DB954),
+            hint: 'spotify.com/user/...',
+          ),
+          SizedBox(height: 16.h),
+          _buildSocialField(
+            label: 'Favorite Track Name',
+            controller: spotifyTrackController,
             icon: Icons.music_note,
             color: const Color(0xFF1DB954),
-            hint: 'Share your music taste',
+            hint: 'e.g. Blinding Lights',
+          ),
+          SizedBox(height: 16.h),
+          _buildSocialField(
+            label: 'Favorite Artist',
+            controller: spotifyArtistController,
+            icon: Icons.person_outline,
+            color: const Color(0xFF1DB954),
+            hint: 'e.g. The Weeknd',
+          ),
+          SizedBox(height: 20.h),
+          ElevatedButton.icon(
+            onPressed: _showSpotifySearchModal,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1DB954),
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: 16.h),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.r),
+              ),
+              elevation: 4,
+            ),
+            icon: Icon(Icons.search, size: 20.r),
+            label: Text(
+              'Search Spotify for Song',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.sp),
+            ),
           ),
         ],
       ),
@@ -2172,24 +2298,24 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       children: [
         Row(
           children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 8),
+            Icon(icon, color: color, size: 18.r),
+            SizedBox(width: 8.w),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: NexoraColors.textPrimary,
-                fontSize: 14,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Container(
           decoration: BoxDecoration(
             color: NexoraColors.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: NexoraColors.cardBorder),
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
           ),
           child: TextField(
             controller: controller,
@@ -2197,12 +2323,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             decoration: InputDecoration(
               prefixIcon: prefix != null
                   ? Padding(
-                      padding: const EdgeInsets.only(left: 16, right: 4),
+                      padding: EdgeInsets.only(left: 16.w, right: 4.w),
                       child: Text(
                         prefix,
                         style: TextStyle(
                           color: NexoraColors.textMuted,
-                          fontSize: 15,
+                          fontSize: 15.sp,
                         ),
                       ),
                     )
@@ -2217,10 +2343,10 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
               border: InputBorder.none,
               contentPadding: EdgeInsets.only(
-                left: prefix != null ? 0 : 16,
-                right: 16,
-                top: 14,
-                bottom: 14,
+                left: prefix != null ? 0 : 16.w,
+                right: 16.w,
+                top: 14.h,
+                bottom: 14.h,
               ),
             ),
           ),
@@ -2234,28 +2360,28 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       onTap: _saveProfile,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        padding: EdgeInsets.symmetric(vertical: 18.h),
         decoration: BoxDecoration(
           gradient: NexoraGradients.primaryButton,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
               color: NexoraColors.primaryPurple.withOpacity(0.4),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              blurRadius: 20.r,
+              offset: Offset(0, 8.h),
             ),
           ],
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.save_outlined, color: Colors.white, size: 20),
-            SizedBox(width: 10),
+            Icon(Icons.save_outlined, color: Colors.white, size: 20.r),
+            SizedBox(width: 10.w),
             Text(
               'Save Changes',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 16.sp,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2281,7 +2407,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
           children: [
             Text(
               label,
-              style: TextStyle(color: NexoraColors.textMuted, fontSize: 12),
+              style: TextStyle(color: NexoraColors.textMuted, fontSize: 12.sp),
             ),
             if (maxLength != null)
               Text(
@@ -2290,17 +2416,17 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                   color: controller.text.length > maxLength
                       ? NexoraColors.error
                       : NexoraColors.textMuted,
-                  fontSize: 11,
+                  fontSize: 11.sp,
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Container(
           decoration: BoxDecoration(
             color: NexoraColors.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: NexoraColors.cardBorder),
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
           ),
           child: TextField(
             controller: controller,
@@ -2309,15 +2435,19 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             style: const TextStyle(color: NexoraColors.textPrimary),
             decoration: InputDecoration(
               prefixIcon: Padding(
-                padding: EdgeInsets.only(bottom: maxLines > 1 ? 50 : 0),
-                child: Icon(icon, color: NexoraColors.primaryPurple, size: 20),
+                padding: EdgeInsets.only(bottom: maxLines > 1 ? 50.h : 0),
+                child: Icon(
+                  icon,
+                  color: NexoraColors.primaryPurple,
+                  size: 20.r,
+                ),
               ),
               hintText: hint,
               hintStyle: TextStyle(
                 color: NexoraColors.textMuted.withOpacity(0.5),
               ),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.all(16),
+              contentPadding: EdgeInsets.all(16.w),
               counterText: '',
             ),
           ),
@@ -2338,15 +2468,15 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       children: [
         Text(
           label,
-          style: TextStyle(color: NexoraColors.textMuted, fontSize: 12),
+          style: TextStyle(color: NexoraColors.textMuted, fontSize: 12.sp),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: EdgeInsets.symmetric(horizontal: 12.w),
           decoration: BoxDecoration(
             color: NexoraColors.cardBackground,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: NexoraColors.cardBorder),
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -2362,12 +2492,12 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 return DropdownMenuItem(
                   value: item,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: EdgeInsets.symmetric(vertical: 10.h),
                     child: Text(
                       item,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: NexoraColors.textPrimary,
-                        fontSize: 14,
+                        fontSize: 14.sp,
                       ),
                     ),
                   ),
