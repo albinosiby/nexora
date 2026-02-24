@@ -73,18 +73,31 @@ class ProfileModel {
       username.isNotEmpty ? username : name.toLowerCase().replaceAll(' ', '.');
 
   factory ProfileModel.fromJson(Map<String, dynamic> json) {
+    final avatarSeed = json['avatarSeed'] ?? '';
+    final avatarStyle = json['avatarStyle'] ?? 'avataaars';
+    final name = json['name'] ?? '';
+    final rawAvatar = json['avatar'] ?? '';
+    // Generate DiceBear URL if avatar field is empty
+    final seed = avatarSeed.isNotEmpty ? avatarSeed : name;
+    final generatedAvatar = seed.isNotEmpty
+        ? 'https://api.dicebear.com/7.x/$avatarStyle/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=transparent&size=200'
+        : '';
+    final avatar = (rawAvatar is String && rawAvatar.isNotEmpty)
+        ? rawAvatar
+        : generatedAvatar;
+
     return ProfileModel(
       id: json['id'] ?? '',
-      name: json['name'] ?? '',
+      name: name,
       username: json['username'] ?? '',
       email: json['email'] ?? '',
       phone: json['phone'] ?? '',
-      avatar: json['avatar'] ?? '',
+      avatar: avatar,
       bio: json['bio'] ?? '',
       year: json['year'] ?? '',
       major: json['major'] ?? '',
-      avatarSeed: json['avatarSeed'] ?? '',
-      avatarStyle: json['avatarStyle'] ?? 'avataaars',
+      avatarSeed: avatarSeed,
+      avatarStyle: avatarStyle,
       age: json['age'] ?? 18,
       gender: json['gender'],
       dateOfBirth: json['dateOfBirth'] != null
@@ -118,13 +131,26 @@ class ProfileModel {
 
   factory ProfileModel.fromUserData(dynamic userData) {
     // Handle UserModel specifically for proper field mapping
+    final avatarSeed = userData.avatarSeed ?? '';
+    final avatarStyle = userData.avatarStyle ?? 'avataaars';
+    final name = userData.name ?? '';
+    final rawAvatar = userData.avatar;
+    // Generate DiceBear URL if avatar field is empty/null
+    final seed = avatarSeed.isNotEmpty ? avatarSeed : name;
+    final generatedAvatar = seed.isNotEmpty
+        ? 'https://api.dicebear.com/7.x/$avatarStyle/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=transparent&size=200'
+        : '';
+    final avatar = (rawAvatar != null && rawAvatar.isNotEmpty)
+        ? rawAvatar
+        : generatedAvatar;
+
     return ProfileModel(
       id: userData.id ?? '',
-      name: userData.name ?? '',
+      name: name,
       username: userData.username ?? '',
       email: userData.email ?? '',
       phone: userData.phone ?? '',
-      avatar: userData.avatar ?? '',
+      avatar: avatar,
       bio: userData.bio ?? '',
       year: userData.year ?? '',
       major: userData.major ?? '',
@@ -138,8 +164,9 @@ class ProfileModel {
       spotifyArtist: userData.spotifyArtist,
       lookingFor: userData.lookingFor,
       chats: userData.chats ?? const [],
-      avatarSeed: userData.avatarSeed ?? '',
-      avatarStyle: userData.avatarStyle ?? 'avataaars',
+      avatarSeed: avatarSeed,
+      avatarStyle: avatarStyle,
+      photos: [],
       createdAt: userData.createdAt,
       lastActive: userData.lastActive,
       fcmToken: userData.fcmToken,

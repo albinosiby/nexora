@@ -121,6 +121,7 @@ class _NotificationScreenState extends State<NotificationScreen>
                 ),
                 child: TabBar(
                   controller: _tabController,
+                  dividerColor: Colors.transparent,
                   indicator: BoxDecoration(
                     borderRadius: BorderRadius.circular(25.r),
                     gradient: NexoraGradients.primaryButton,

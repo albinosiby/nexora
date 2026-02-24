@@ -61,6 +61,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
           centerTitle: true,
           bottom: TabBar(
             controller: _tabController,
+            dividerColor: Colors.transparent,
             indicatorColor: NexoraColors.primaryPurple,
             indicatorWeight: 3,
             labelColor: NexoraColors.textPrimary,
@@ -584,6 +585,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
         profile: ProfileModel(
           id: request.userId,
           name: request.name,
+          username: request.name,
           email:
               '${request.name.toLowerCase().replaceAll(' ', '.')}@example.com',
           avatar: request.avatar,

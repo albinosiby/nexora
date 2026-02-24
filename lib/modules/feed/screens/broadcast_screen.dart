@@ -6,7 +6,6 @@ import 'package:get/get.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../core/widgets/dark_background.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
@@ -33,7 +32,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   // Removed _isFabVisible since FAB will always be visible.
   // Reactive user profile from AuthRepository
   UserModel? get _currentUser => AuthRepository.instance.currentUserProfile;
-  String get _userName => _currentUser?.name ?? 'Guest';
+  String get _userName => _currentUser?.displayName ?? 'Guest';
   String get _userAvatar => _currentUser?.avatar ?? '';
   String get _userId => _currentUser?.id ?? '';
 
@@ -641,143 +640,180 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
   @override
   Widget build(BuildContext context) {
-    return DarkBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _refreshFeed,
-            color: NexoraColors.primaryPurple,
-            backgroundColor: NexoraColors.midnightPurple,
-            displacement: 40.h,
-            edgeOffset: 20.h,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                // Enhanced App Bar
-                SliverAppBar(
-                  pinned: true,
-                  floating: true,
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  flexibleSpace: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          // Background gradient orbs
+          Positioned(
+            top: -100.h,
+            right: -100.w,
+            child: Container(
+              width: 300.r,
+              height: 300.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    NexoraColors.primaryPurple.withOpacity(0.2),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 150.h,
+            left: -80.w,
+            child: Container(
+              width: 250.r,
+              height: 250.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    NexoraColors.romanticPink.withOpacity(0.12),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _refreshFeed,
+              color: NexoraColors.primaryPurple,
+              backgroundColor: NexoraColors.midnightPurple,
+              displacement: 40.h,
+              edgeOffset: 20.h,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  // Enhanced App Bar
+                  SliverAppBar(
+                    pinned: true,
+                    floating: true,
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    flexibleSpace: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            NexoraColors.midnightDark.withOpacity(0.9),
+                            NexoraColors.midnightDark.withOpacity(0.7),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                    title: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
                         colors: [
-                          NexoraColors.midnightDark.withOpacity(0.9),
-                          NexoraColors.midnightDark.withOpacity(0.7),
-                          Colors.transparent,
+                          NexoraColors.primaryPurple,
+                          NexoraColors.romanticPink,
+                        ],
+                      ).createShader(bounds),
+                      child: Text(
+                        'Feed',
+                        style: NexoraTextStyles.headline1.copyWith(
+                          fontSize: 28.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.w,
+                        ),
+                      ),
+                    ),
+                    bottom: PreferredSize(
+                      // height must account for vertical padding (8 top + 16 bottom)
+                      // plus the 50px search bar, so total 74 to avoid overflow.
+                      preferredSize: Size.fromHeight(74.h),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+                        child: _buildSearchBar(),
+                      ),
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(child: SizedBox(height: 8.h)),
+
+                  // Trending Stories Section
+                  SliverToBoxAdapter(child: SizedBox(height: 8.h)),
+
+                  // Feed Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20.w),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(6.r),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  NexoraColors.primaryPurple.withOpacity(0.3),
+                                  NexoraColors.primaryPurple.withOpacity(0.1),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                            child: Icon(
+                              Icons.grid_view_rounded,
+                              color: NexoraColors.primaryPurple,
+                              size: 18.r,
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          Text(
+                            'Latest Updates',
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${filteredPosts.length} posts',
+                            style: TextStyle(
+                              color: NexoraColors.textMuted,
+                              fontSize: 12.sp,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  title: ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [
-                        NexoraColors.primaryPurple,
-                        NexoraColors.romanticPink,
-                      ],
-                    ).createShader(bounds),
-                    child: Text(
-                      'Nexora',
-                      style: NexoraTextStyles.headline1.copyWith(
-                        fontSize: 28.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.w,
-                      ),
+
+                  SliverToBoxAdapter(child: SizedBox(height: 16.h)),
+
+                  // Feed
+                  SliverToBoxAdapter(
+                    child: AnimatedBuilder(
+                      animation: _refreshController,
+                      builder: (context, _) => _buildFeed(),
                     ),
                   ),
-                  bottom: PreferredSize(
-                    // height must account for vertical padding (8 top + 16 bottom)
-                    // plus the 50px search bar, so total 74 to avoid overflow.
-                    preferredSize: Size.fromHeight(74.h),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
-                      child: _buildSearchBar(),
-                    ),
-                  ),
-                ),
 
-                SliverToBoxAdapter(child: SizedBox(height: 8.h)),
-
-                // Trending Stories Section
-                SliverToBoxAdapter(child: SizedBox(height: 8.h)),
-
-                // Feed Header
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20.w),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(6.r),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                NexoraColors.primaryPurple.withOpacity(0.3),
-                                NexoraColors.primaryPurple.withOpacity(0.1),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(8.r),
-                          ),
-                          child: Icon(
-                            Icons.grid_view_rounded,
-                            color: NexoraColors.primaryPurple,
-                            size: 18.r,
-                          ),
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          'Latest Updates',
-                          style: TextStyle(
-                            color: NexoraColors.textPrimary,
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${filteredPosts.length} posts',
-                          style: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 12.sp,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                SliverToBoxAdapter(child: SizedBox(height: 16.h)),
-
-                // Feed
-                SliverToBoxAdapter(
-                  child: AnimatedBuilder(
-                    animation: _refreshController,
-                    builder: (context, _) => _buildFeed(),
-                  ),
-                ),
-
-                SliverToBoxAdapter(child: SizedBox(height: 80.h)),
-              ],
+                  SliverToBoxAdapter(child: SizedBox(height: 80.h)),
+                ],
+              ),
             ),
           ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createPost,
+        backgroundColor: NexoraColors.primaryPurple,
+        elevation: 8.r,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(30.r),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _createPost,
-          backgroundColor: NexoraColors.primaryPurple,
-          elevation: 8.r,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30.r),
-          ),
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text(
-            'Create Post',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Create Post',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -988,13 +1024,32 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                           ],
                         ),
                         child: Center(
-                          child: Text(
-                            post.avatar.isNotEmpty ? post.avatar : post.user[0],
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20.sp,
-                            ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(15.r),
+                            child: post.avatar.isNotEmpty
+                                ? Image.network(
+                                    post.avatar,
+                                    width: 50.w,
+                                    height: 50.w,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) => Text(
+                                          post.displayName[0].toUpperCase(),
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 20.sp,
+                                          ),
+                                        ),
+                                  )
+                                : Text(
+                                    post.displayName[0].toUpperCase(),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20.sp,
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -1027,32 +1082,11 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                         Row(
                           children: [
                             Text(
-                              post.user.toString(),
+                              post.displayName,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: NexoraColors.textPrimary,
                                 fontSize: 16.sp,
-                              ),
-                            ),
-                            SizedBox(width: 8.w),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8.w,
-                                vertical: 3.h,
-                              ),
-                              decoration: BoxDecoration(
-                                color: NexoraColors.primaryPurple.withOpacity(
-                                  0.15,
-                                ),
-                                borderRadius: BorderRadius.circular(12.r),
-                              ),
-                              child: Text(
-                                post.username.toString(),
-                                style: TextStyle(
-                                  color: NexoraColors.primaryPurple,
-                                  fontSize: 11.sp,
-                                  fontWeight: FontWeight.w500,
-                                ),
                               ),
                             ),
                           ],
@@ -1236,7 +1270,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                         ),
                         child: Center(
                           child: Text(
-                            comment.user[0],
+                            post.commentsList[commentIndex].displayName[0]
+                                .toUpperCase(),
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11.sp,
@@ -1254,7 +1289,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                               text: TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: comment.user,
+                                    text: comment.displayName,
                                     style: TextStyle(
                                       color: NexoraColors.textPrimary,
                                       fontSize: 13.sp,
@@ -1846,8 +1881,9 @@ class _CreatePostSheetState extends State<CreatePostSheet>
         .map((m) => m.group(0)!)
         .toList();
 
-    final username =
-        '@${(widget.userName ?? 'You').toLowerCase().replaceAll(' ', '.')}';
+    final username = widget.userName?.startsWith('@') == true
+        ? widget.userName!
+        : '@${(widget.userName ?? 'You').toLowerCase().replaceAll(' ', '.')}';
 
     final postModel = PostModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -2038,7 +2074,9 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                   child: Center(
                     child: Text(
                       (widget.userName ?? 'U').isNotEmpty
-                          ? (widget.userName ?? 'U')[0].toUpperCase()
+                          ? (widget.userName ?? 'U').startsWith('@')
+                                ? (widget.userName ?? 'U')[1].toUpperCase()
+                                : (widget.userName ?? 'U')[0].toUpperCase()
                           : 'U',
                       style: TextStyle(
                         color: Colors.white,
@@ -2548,6 +2586,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       userId: fb.FirebaseAuth.instance.currentUser?.uid ?? '',
       user: widget.userName,
+      username: widget.userName.startsWith('@') ? widget.userName : '',
+      avatar: widget.userAvatar ?? '',
       comment: _commentController.text.trim(),
       time: 'Just now',
       createdAt: DateTime.now(),
@@ -2663,39 +2703,42 @@ class _CommentsSheetState extends State<CommentsSheet> {
           Expanded(
             child: _comments.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(20.r),
-                          decoration: BoxDecoration(
-                            color: NexoraColors.glassBackground,
-                            shape: BoxShape.circle,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(20.r),
+                            decoration: BoxDecoration(
+                              color: NexoraColors.glassBackground,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.chat_bubble_outline,
+                              size: 64.r,
+                              color: NexoraColors.textMuted.withOpacity(0.8),
+                            ),
                           ),
-                          child: Icon(
-                            Icons.chat_bubble_outline,
-                            size: 64.r,
-                            color: NexoraColors.textMuted.withOpacity(0.8),
+                          SizedBox(height: 20.h),
+                          Text(
+                            'No comments yet',
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 20.h),
-                        Text(
-                          'No comments yet',
-                          style: TextStyle(
-                            color: NexoraColors.textPrimary,
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.bold,
+                          SizedBox(height: 8.h),
+                          Text(
+                            'Be the first to start the conversation!',
+                            style: TextStyle(
+                              color: NexoraColors.textMuted,
+                              fontSize: 14.sp,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 8.h),
-                        Text(
-                          'Be the first to start the conversation!',
-                          style: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 14.sp,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -2899,13 +2942,31 @@ class _CommentsSheetState extends State<CommentsSheet> {
             shape: BoxShape.circle,
           ),
           child: Center(
-            child: Text(
-              comment.user[0].toUpperCase(),
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16.sp,
-                fontWeight: FontWeight.bold,
-              ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20.w),
+              child: comment.avatar.isNotEmpty
+                  ? Image.network(
+                      comment.avatar,
+                      width: 40.w,
+                      height: 40.w,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Text(
+                        comment.displayName[0].toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      comment.displayName[0].toUpperCase(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
         ),
@@ -2926,7 +2987,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     Row(
                       children: [
                         Text(
-                          comment.user,
+                          comment.displayName,
                           style: TextStyle(
                             color: NexoraColors.textPrimary,
                             fontWeight: FontWeight.bold,

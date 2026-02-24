@@ -40,6 +40,8 @@ class PostModel {
     this.updatedAt,
   });
 
+  String get displayName => username.isNotEmpty ? username : user;
+
   factory PostModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {
       if (date == null) return DateTime.now();
@@ -147,6 +149,8 @@ class CommentModel {
   final String id;
   final String userId;
   final String user;
+  final String username;
+  final String avatar;
   final String comment;
   final String time;
   final DateTime createdAt;
@@ -156,11 +160,16 @@ class CommentModel {
     required this.id,
     required this.userId,
     required this.user,
+    this.username = '',
+    this.avatar = '',
     required this.comment,
     required this.time,
     required this.createdAt,
     this.replies = const [],
   });
+
+  String get displayName =>
+      username.isNotEmpty ? username : user.toLowerCase().replaceAll(' ', '.');
 
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {
@@ -174,6 +183,8 @@ class CommentModel {
       id: json['id'] ?? '',
       userId: json['userId'] ?? '',
       user: json['user'] ?? '',
+      username: json['username'] ?? '',
+      avatar: json['avatar'] ?? '',
       comment: json['comment'] ?? '',
       time: json['time'] ?? '',
       createdAt: _parseDate(json['createdAt']),
@@ -188,6 +199,8 @@ class CommentModel {
       'id': id,
       'userId': userId,
       'user': user,
+      'username': username,
+      'avatar': avatar,
       'comment': comment,
       'time': time,
       'createdAt': createdAt.toIso8601String(),
@@ -199,6 +212,8 @@ class CommentModel {
     String? id,
     String? userId,
     String? user,
+    String? username,
+    String? avatar,
     String? comment,
     String? time,
     DateTime? createdAt,
@@ -208,6 +223,8 @@ class CommentModel {
       id: id ?? this.id,
       userId: userId ?? this.userId,
       user: user ?? this.user,
+      username: username ?? this.username,
+      avatar: avatar ?? this.avatar,
       comment: comment ?? this.comment,
       time: time ?? this.time,
       createdAt: createdAt ?? this.createdAt,
@@ -221,6 +238,8 @@ class ReplyModel {
   final String id;
   final String userId;
   final String user;
+  final String username;
+  final String avatar;
   final String reply;
   final String time;
   final DateTime createdAt;
@@ -229,10 +248,15 @@ class ReplyModel {
     required this.id,
     required this.userId,
     required this.user,
+    this.username = '',
+    this.avatar = '',
     required this.reply,
     required this.time,
     required this.createdAt,
   });
+
+  String get displayName =>
+      username.isNotEmpty ? username : user.toLowerCase().replaceAll(' ', '.');
 
   factory ReplyModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {
@@ -246,6 +270,8 @@ class ReplyModel {
       id: json['id'] ?? '',
       userId: json['userId'] ?? '',
       user: json['user'] ?? '',
+      username: json['username'] ?? '',
+      avatar: json['avatar'] ?? '',
       reply: json['reply'] ?? '',
       time: json['time'] ?? '',
       createdAt: _parseDate(json['createdAt']),
@@ -257,6 +283,8 @@ class ReplyModel {
       'id': id,
       'userId': userId,
       'user': user,
+      'username': username,
+      'avatar': avatar,
       'reply': reply,
       'time': time,
       'createdAt': createdAt.toIso8601String(),

@@ -13,6 +13,9 @@ class MessageModel {
   final bool isRead;
   final String? reaction;
   final int? duration;
+  final String? replyToId;
+  final String? replyToContent;
+  final String? replyToSenderId;
 
   MessageModel({
     required this.id,
@@ -25,6 +28,9 @@ class MessageModel {
     this.isRead = false,
     this.reaction,
     this.duration,
+    this.replyToId,
+    this.replyToContent,
+    this.replyToSenderId,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json, String id) {
@@ -54,6 +60,9 @@ class MessageModel {
       isRead: json['isRead'] ?? false,
       reaction: json['reaction'],
       duration: json['duration'],
+      replyToId: json['replyToId'],
+      replyToContent: json['replyToContent'],
+      replyToSenderId: json['replyToSenderId'],
     );
   }
 
@@ -68,6 +77,9 @@ class MessageModel {
       'isRead': isRead,
       'reaction': reaction,
       'duration': duration,
+      if (replyToId != null) 'replyToId': replyToId,
+      if (replyToContent != null) 'replyToContent': replyToContent,
+      if (replyToSenderId != null) 'replyToSenderId': replyToSenderId,
     };
   }
 }

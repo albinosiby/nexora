@@ -72,36 +72,13 @@ class MatchUserModel {
     );
   }
 
-  /// Create from DummyDatabase UserData (fallback for development)
-  factory MatchUserModel.fromUserData(dynamic userData) {
-    return MatchUserModel(
-      id: userData.id ?? '',
-      name: userData.displayName ?? userData.name ?? '',
-      username: userData.username ?? '',
-      age: userData.age ?? 18,
-      year: userData.year ?? '',
-      major: userData.major ?? '',
-      bio: userData.bio ?? '',
-      interests: List<String>.from(userData.interests ?? []),
-      avatar: userData.avatar ?? '',
-      connections: userData.connections ?? 0,
-      isOnline: userData.isOnline ?? false,
-      isVerified: userData.isVerified ?? false,
-      lastActive: userData.lastActive,
-      photos: List<String>.from(userData.photos ?? [userData.avatar ?? '']),
-      spotifyTrackName: userData.spotifyTrackName,
-      spotifyArtist: userData.spotifyArtist,
-      lookingFor: userData.lookingFor,
-    );
-  }
-
   /// Convert to ProfileModel for navigation
   ProfileModel toProfileModel() {
     return ProfileModel(
       id: id,
       name: name,
       username: username,
-      email: '${name.toLowerCase().replaceAll(' ', '.')}@example.com',
+      email: '',
       avatar: avatar,
       bio: bio,
       year: year,
@@ -129,4 +106,8 @@ class MatchUserModel {
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
   }
+
+  /// Public display name (uses username if available, else formatted name)
+  String get displayName =>
+      username.isNotEmpty ? username : name.toLowerCase().replaceAll(' ', '.');
 }

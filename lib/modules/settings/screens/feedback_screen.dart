@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/widgets/dark_background.dart';
+import '../../profile/repositories/user_repository.dart';
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
@@ -168,8 +169,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           ),
           elevation: 0,
         ),
-        onPressed: () {
-          if (_feedbackController.text.trim().isNotEmpty) {
+        onPressed: () async {
+          final feedback = _feedbackController.text.trim();
+          if (feedback.isNotEmpty) {
+            // Show loading or just proceed
+            await UserRepository.instance.submitFeedback(
+              _selectedCategory,
+              feedback,
+            );
+
             Get.back();
             Get.snackbar(
               'Thank You!',

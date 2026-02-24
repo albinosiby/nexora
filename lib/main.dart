@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'core/theme/nexora_theme.dart';
-import 'core/services/dummy_database.dart';
 import 'modules/auth/screens/splash_screen.dart';
 import 'modules/connections/repositories/connection_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -23,7 +22,6 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Initialize services
-  Get.put(DummyDatabase()); // Initialize dummy database first
   Get.put(AuthRepository());
   Get.put(PostRepository());
   Get.put(UserRepository());

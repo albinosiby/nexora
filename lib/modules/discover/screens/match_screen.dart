@@ -6,7 +6,6 @@ import '../../connections/repositories/connection_service.dart';
 import '../../notifications/screens/notification_screen.dart';
 import '../../notifications/controllers/notification_controller.dart';
 import '../../profile/screens/profile_view_screen.dart';
-import '../../settings/screens/settings_screen.dart';
 import '../models/match_user_model.dart';
 import '../controllers/match_controller.dart';
 
@@ -50,273 +49,310 @@ class _MatchScreenState extends State<MatchScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // Modern App Bar
-          SliverAppBar(
-            floating: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            expandedHeight: 60.h,
-            title: Row(
-              children: [
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [
-                      NexoraColors.primaryPurple,
-                      NexoraColors.romanticPink,
-                    ],
-                  ).createShader(bounds),
-                  child: Text(
-                    'Kootu',
-                    style: NexoraTextStyles.headline2.copyWith(
-                      fontSize: 26.sp,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.5.w,
-                    ),
-                  ),
+      body: Stack(
+        children: [
+          // Background gradient orbs
+          Positioned(
+            top: -100.h,
+            right: -100.w,
+            child: Container(
+              width: 300.r,
+              height: 300.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    NexoraColors.primaryPurple.withOpacity(0.2),
+                    Colors.transparent,
+                  ],
                 ),
-                const Spacer(),
-                Obx(
-                  () => _buildHeaderIcon(
-                    Icons.notifications_outlined,
-                    _notificationController.unreadCount,
-                    onTap: () => Get.to(() => const NotificationScreen()),
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                _buildHeaderIcon(
-                  Icons.settings_outlined,
-                  0,
-                  onTap: () => Get.to(() => const SettingsScreen()),
-                ),
-              ],
-            ),
-          ),
-
-          // Greeting Section
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 16.h),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Discover New People',
-                    style: NexoraTextStyles.headline1.copyWith(
-                      fontSize: 28.sp,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
-
-          // Search Bar
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.w),
-              child: Container(
-                height: 54.h,
-                decoration: BoxDecoration(
-                  color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(27.r),
-                  border: Border.all(color: NexoraColors.glassBorder),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10.r,
-                      offset: Offset(0, 4.h),
-                    ),
+          Positioned(
+            bottom: 150.h,
+            left: -80.w,
+            child: Container(
+              width: 250.r,
+              height: 250.r,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    NexoraColors.romanticPink.withOpacity(0.12),
+                    Colors.transparent,
                   ],
                 ),
-                child: Row(
+              ),
+            ),
+          ),
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              // Modern App Bar
+              SliverAppBar(
+                floating: true,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                expandedHeight: 60.h,
+                title: Row(
                   children: [
-                    SizedBox(width: 18.w),
-                    Icon(
-                      Icons.search_rounded,
-                      color: NexoraColors.textMuted,
-                      size: 22.r,
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [
+                          NexoraColors.primaryPurple,
+                          NexoraColors.romanticPink,
+                        ],
+                      ).createShader(bounds),
+                      child: Text(
+                        'Kootu',
+                        style: NexoraTextStyles.headline2.copyWith(
+                          fontSize: 26.sp,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.5.w,
+                        ),
+                      ),
                     ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: TextField(
-                        style: TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontSize: 15.sp,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Search by name, major, interests...',
-                          hintStyle: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 14.sp,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (value) => _controller.setSearchQuery(value),
+                    const Spacer(),
+                    Obx(
+                      () => _buildHeaderIcon(
+                        Icons.notifications_outlined,
+                        _notificationController.unreadCount,
+                        onTap: () => Get.to(() => const NotificationScreen()),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
 
-          SliverToBoxAdapter(child: SizedBox(height: 20.h)),
-
-          // Filter Chips with horizontal scroll
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 40.h,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.symmetric(horizontal: 20.w),
-                itemCount: _filters.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: EdgeInsets.only(right: 10.w),
-                    child: Obx(() => _buildFilterChip(_filters[index], index)),
-                  );
-                },
-              ),
-            ),
-          ),
-
-          SliverToBoxAdapter(child: SizedBox(height: 24.h)),
-
-          // Discover Section Header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.w),
-              child: Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(8.r),
-                    decoration: BoxDecoration(
-                      color: NexoraColors.accentCyan.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10.r),
-                    ),
-                    child: Icon(
-                      Icons.explore_rounded,
-                      color: NexoraColors.accentCyan,
-                      size: 18.r,
-                    ),
-                  ),
-                  SizedBox(width: 10.w),
-                  Text(
-                    'Discover People',
-                    style: TextStyle(
-                      color: NexoraColors.textPrimary,
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Obx(
-                    () => Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 10.w,
-                        vertical: 4.h,
+              // Greeting Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 16.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Discover New People',
+                        style: NexoraTextStyles.headline1.copyWith(
+                          fontSize: 28.sp,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: NexoraColors.success.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12.r),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 6.r,
-                            height: 6.r,
-                            decoration: const BoxDecoration(
-                              color: NexoraColors.success,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          SizedBox(width: 6.w),
-                          Text(
-                            '${_controller.onlineCount} online',
-                            style: TextStyle(
-                              color: NexoraColors.success,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Main Content - Realtime Grid View
-          Obx(() {
-            if (_controller.isLoading.value) {
-              return SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40.r),
-                    child: const CircularProgressIndicator(
-                      color: NexoraColors.primaryPurple,
-                    ),
+                    ],
                   ),
                 ),
-              );
-            }
+              ),
 
-            final filteredUsers = _controller.filteredUsers;
-
-            if (filteredUsers.isEmpty) {
-              return SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40.r),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 48.r,
-                          color: NexoraColors.textMuted.withOpacity(0.5),
+              // Search Bar
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.w),
+                  child: Container(
+                    height: 54.h,
+                    decoration: BoxDecoration(
+                      color: NexoraColors.glassBackground,
+                      borderRadius: BorderRadius.circular(27.r),
+                      border: Border.all(color: NexoraColors.glassBorder),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10.r,
+                          offset: Offset(0, 4.h),
                         ),
-                        SizedBox(height: 12.h),
-                        Text(
-                          'No people found',
-                          style: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 16.sp,
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 18.w),
+                        Icon(
+                          Icons.search_rounded,
+                          color: NexoraColors.textMuted,
+                          size: 22.r,
+                        ),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                          child: TextField(
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontSize: 15.sp,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Search by name, major, interests...',
+                              hintStyle: TextStyle(
+                                color: NexoraColors.textMuted,
+                                fontSize: 14.sp,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (value) =>
+                                _controller.setSearchQuery(value),
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              );
-            }
+              ),
 
-            return SliverPadding(
-              padding: EdgeInsets.all(20.r),
-              sliver: SliverGrid(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 16.h,
-                  crossAxisSpacing: 16.w,
-                  childAspectRatio: 0.72,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildModernCard(filteredUsers[index]),
-                  childCount: filteredUsers.length,
+              SliverToBoxAdapter(child: SizedBox(height: 20.h)),
+
+              // Filter Chips with horizontal scroll
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 40.h,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.symmetric(horizontal: 20.w),
+                    itemCount: _filters.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: EdgeInsets.only(right: 10.w),
+                        child: Obx(
+                          () => _buildFilterChip(_filters[index], index),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
-            );
-          }),
 
-          SliverToBoxAdapter(child: SizedBox(height: 100.h)),
+              SliverToBoxAdapter(child: SizedBox(height: 24.h)),
+
+              // Discover Section Header
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20.w),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: NexoraColors.accentCyan.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10.r),
+                        ),
+                        child: Icon(
+                          Icons.explore_rounded,
+                          color: NexoraColors.accentCyan,
+                          size: 18.r,
+                        ),
+                      ),
+                      SizedBox(width: 10.w),
+                      Text(
+                        'Discover People',
+                        style: TextStyle(
+                          color: NexoraColors.textPrimary,
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Obx(
+                        () => Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10.w,
+                            vertical: 4.h,
+                          ),
+                          decoration: BoxDecoration(
+                            color: NexoraColors.success.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 6.r,
+                                height: 6.r,
+                                decoration: const BoxDecoration(
+                                  color: NexoraColors.success,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              SizedBox(width: 6.w),
+                              Text(
+                                '${_controller.onlineCount} online',
+                                style: TextStyle(
+                                  color: NexoraColors.success,
+                                  fontSize: 12.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Main Content - Realtime Grid View
+              Obx(() {
+                if (_controller.isLoading.value) {
+                  return SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.r),
+                        child: const CircularProgressIndicator(
+                          color: NexoraColors.primaryPurple,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final filteredUsers = _controller.filteredUsers;
+
+                if (filteredUsers.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.r),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 48.r,
+                              color: NexoraColors.textMuted.withOpacity(0.5),
+                            ),
+                            SizedBox(height: 12.h),
+                            Text(
+                              'No people found',
+                              style: TextStyle(
+                                color: NexoraColors.textMuted,
+                                fontSize: 16.sp,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return SliverPadding(
+                  padding: EdgeInsets.all(20.r),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 16.h,
+                      crossAxisSpacing: 16.w,
+                      childAspectRatio: 0.72,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) =>
+                          _buildModernCard(filteredUsers[index]),
+                      childCount: filteredUsers.length,
+                    ),
+                  ),
+                );
+              }),
+
+              SliverToBoxAdapter(child: SizedBox(height: 100.h)),
+            ],
+          ),
         ],
       ),
     );
@@ -497,8 +533,8 @@ class _MatchScreenState extends State<MatchScreen>
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(
-                            user.name.isNotEmpty
-                                ? user.name[0].toUpperCase()
+                            user.displayName.isNotEmpty
+                                ? user.displayName[0].toUpperCase()
                                 : '?',
                             style: TextStyle(
                               fontSize: 40.sp,
@@ -554,7 +590,7 @@ class _MatchScreenState extends State<MatchScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            '${user.name}, ${user.age}',
+                            user.displayName,
                             style: TextStyle(
                               color: NexoraColors.textPrimary,
                               fontWeight: FontWeight.bold,
@@ -575,7 +611,7 @@ class _MatchScreenState extends State<MatchScreen>
 
                     // Major and Year
                     Text(
-                      '${user.year} • ${user.major}',
+                      user.major,
                       style: TextStyle(
                         color: NexoraColors.textMuted,
                         fontSize: 10.sp,
@@ -646,7 +682,7 @@ class _MatchScreenState extends State<MatchScreen>
             _connectionService.cancelRequest(userId);
             Get.snackbar(
               'Request Cancelled',
-              'Connection request to ${user.name} cancelled',
+              'Connection request to ${user.displayName} cancelled',
               backgroundColor: NexoraColors.glassBackground,
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
@@ -666,7 +702,7 @@ class _MatchScreenState extends State<MatchScreen>
             _connectionService.acceptRequest(userId);
             Get.snackbar(
               'Connected!',
-              'You are now connected with ${user.name}',
+              'You are now connected with ${user.displayName}',
               backgroundColor: NexoraColors.success.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
@@ -690,12 +726,12 @@ class _MatchScreenState extends State<MatchScreen>
           onTap = () {
             _connectionService.sendRequest(
               userId: userId,
-              name: user.name,
+              name: user.displayName,
               avatar: user.avatar,
               major: user.major,
               year: user.year,
             );
-            _showConnectSnackbar(user.name);
+            _showConnectSnackbar(user.displayName);
           };
       }
 

@@ -60,6 +60,9 @@ class UserModel {
     this.feedNotifications = true,
   });
 
+  String get displayName =>
+      username.isNotEmpty ? username : name.toLowerCase().replaceAll(' ', '.');
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] ?? '',

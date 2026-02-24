@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/dark_background.dart';
 import '../../connections/repositories/connection_service.dart';
 import '../../chat/screens/chat_detail_screen.dart';
 import '../models/profile_model.dart';
@@ -292,119 +293,122 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Background gradients
-          Positioned(
-            top: -100.h,
-            right: -100.w,
-            child: Container(
-              width: 300.r,
-              height: 300.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.2),
-                    Colors.transparent,
-                  ],
+    return DarkBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            // Background gradients
+            Positioned(
+              top: -100.h,
+              right: -100.w,
+              child: Container(
+                width: 300.r,
+                height: 300.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      NexoraColors.primaryPurple.withOpacity(0.2),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: 150.h,
-            left: -80.w,
-            child: Container(
-              width: 250.r,
-              height: 250.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.romanticPink.withOpacity(0.12),
-                    Colors.transparent,
-                  ],
+            Positioned(
+              bottom: 150.h,
+              left: -80.w,
+              child: Container(
+                width: 250.r,
+                height: 250.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      NexoraColors.romanticPink.withOpacity(0.12),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Content
-          SafeArea(
-            child: Column(
-              children: [
-                // App Bar
-                _buildAppBar(),
+            // Content
+            SafeArea(
+              child: Column(
+                children: [
+                  // App Bar
+                  _buildAppBar(),
 
-                // Scrollable content
-                Expanded(
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: _slideAnimation,
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        padding: EdgeInsets.symmetric(horizontal: 20.w),
-                        child: Column(
-                          children: [
-                            SizedBox(height: 20.h),
+                  // Scrollable content
+                  Expanded(
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: SlideTransition(
+                        position: _slideAnimation,
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          padding: EdgeInsets.symmetric(horizontal: 20.w),
+                          child: Column(
+                            children: [
+                              SizedBox(height: 20.h),
 
-                            // Profile Header
-                            _buildProfileHeader(),
+                              // Profile Header
+                              _buildProfileHeader(),
 
-                            SizedBox(height: 24.h),
+                              SizedBox(height: 24.h),
 
-                            // Bio Section
-                            if (widget.profile.bio.isNotEmpty)
-                              _buildBioSection(),
+                              // Bio Section
+                              if (widget.profile.bio.isNotEmpty)
+                                _buildBioSection(),
 
-                            SizedBox(height: 20.h),
+                              SizedBox(height: 20.h),
 
-                            // Spotify Anthem Section
-                            _buildSpotifySection(),
+                              // Spotify Anthem Section
+                              _buildSpotifySection(),
 
-                            SizedBox(height: 20.h),
+                              SizedBox(height: 20.h),
 
-                            // Interests Section
-                            if (widget.profile.interests.isNotEmpty)
+                              // Interests Section
                               _buildInterestsSection(),
 
-                            SizedBox(height: 20.h),
+                              SizedBox(height: 20.h),
 
-                            // Looking For Section
-                            if (widget.profile.lookingFor != null &&
-                                widget.profile.lookingFor!.isNotEmpty)
-                              _buildLookingForSection(),
+                              // Looking For Section
+                              if (widget.profile.lookingFor != null &&
+                                  widget.profile.lookingFor!.isNotEmpty)
+                                _buildLookingForSection(),
 
-                            SizedBox(height: 20.h),
+                              SizedBox(height: 20.h),
 
-                            // Social Links
-                            if (widget.profile.instagram != null ||
-                                widget.profile.spotify != null)
-                              _buildSocialLinks(),
+                              // Social Links
+                              if (widget.profile.instagram != null ||
+                                  widget.profile.spotify != null)
+                                _buildSocialLinks(),
 
-                            SizedBox(height: 100.h), // Space for bottom buttons
-                          ],
+                              SizedBox(
+                                height: 100.h,
+                              ), // Space for bottom buttons
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          // Bottom Action Buttons
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildBottomActions(),
-          ),
-        ],
+            // Bottom Action Buttons
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildBottomActions(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -569,7 +573,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              widget.profile.name,
+              widget.profile.displayName,
               style: TextStyle(
                 fontSize: 28.sp,
                 fontWeight: FontWeight.bold,
@@ -674,13 +678,12 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
   }
 
   Widget _buildSpotifySection() {
-    // Mock Spotify data for the viewed profile
-    const spotifyAnthem = {
-      'title': 'Starboy',
-      'artist': 'The Weeknd',
-      'albumArt':
-          'https://i.scdn.co/image/ab67616d0000b27304e80018e9a3a9b2f5ba8f95',
-    };
+    final trackName = (widget.profile.spotifyTrackName ?? '').isNotEmpty
+        ? widget.profile.spotifyTrackName!
+        : 'No track set';
+    final artist = (widget.profile.spotifyArtist ?? '').isNotEmpty
+        ? widget.profile.spotifyArtist!
+        : 'Add your anthem';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -761,26 +764,20 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(11.r),
-                                child: Image.network(
-                                  spotifyAnthem['albumArt']!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Color(0xFF1DB954),
-                                            Color(0xFF169C46),
-                                          ],
-                                        ),
-                                      ),
-                                      child: Icon(
-                                        Icons.music_note_rounded,
-                                        color: Colors.white,
-                                        size: 24.r,
-                                      ),
-                                    );
-                                  },
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Color(0xFF1DB954),
+                                        Color(0xFF169C46),
+                                      ],
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.music_note_rounded,
+                                    color: Colors.white,
+                                    size: 24.r,
+                                  ),
                                 ),
                               ),
                             ),
@@ -812,7 +809,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              spotifyAnthem['title']!,
+                              trackName,
                               style: TextStyle(
                                 color: NexoraColors.textPrimary,
                                 fontSize: 15.sp,
@@ -841,7 +838,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                                 SizedBox(width: 6.w),
                                 Expanded(
                                   child: Text(
-                                    spotifyAnthem['artist']!,
+                                    artist,
                                     style: TextStyle(
                                       color: NexoraColors.textMuted,
                                       fontSize: 13.sp,
@@ -907,41 +904,58 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       children: [
         _buildSectionHeader('Interests', Icons.favorite_outline),
         SizedBox(height: 12.h),
-        Wrap(
-          spacing: 10.w,
-          runSpacing: 10.h,
-          children: widget.profile.interests.map((interest) {
-            final emoji = interestEmojis[interest] ?? '✨';
-            return Container(
-              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    NexoraColors.glassBackground,
-                    NexoraColors.primaryPurple.withOpacity(0.1),
+        if (widget.profile.interests.isEmpty)
+          Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 16.h),
+              child: Text(
+                'No interests added yet',
+                style: TextStyle(
+                  color: NexoraColors.textMuted,
+                  fontSize: 13.sp,
+                ),
+              ),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 10.w,
+            runSpacing: 10.h,
+            children: widget.profile.interests.map((interest) {
+              final emoji = interestEmojis[interest] ?? '✨';
+              return Container(
+                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      NexoraColors.glassBackground,
+                      NexoraColors.primaryPurple.withOpacity(0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(
+                    color: NexoraColors.glassBorder,
+                    width: 1.w,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(emoji, style: TextStyle(fontSize: 16.sp)),
+                    SizedBox(width: 6.w),
+                    Text(
+                      interest,
+                      style: TextStyle(
+                        color: NexoraColors.textPrimary,
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(20.r),
-                border: Border.all(color: NexoraColors.glassBorder, width: 1.w),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(emoji, style: TextStyle(fontSize: 16.sp)),
-                  SizedBox(width: 6.w),
-                  Text(
-                    interest,
-                    style: TextStyle(
-                      color: NexoraColors.textPrimary,
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
+              );
+            }).toList(),
+          ),
       ],
     );
   }
@@ -1086,51 +1100,68 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
   Widget _buildBottomActions() {
     return Container(
-      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 24.h),
+      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 32.h),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            NexoraColors.midnightDark.withOpacity(0.9),
+            NexoraColors.midnightDark.withOpacity(0.8),
             NexoraColors.midnightDark,
           ],
+          stops: const [0.0, 0.4, 1.0],
         ),
       ),
       child: SafeArea(
         child: Row(
           children: [
-            // Like Button
+            // Like Button - Redesigned
             GestureDetector(
               onTap: _toggleLike,
-              child: AnimatedContainer(
+              child: TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 200),
-                width: 60.r,
-                height: 60.r,
-                decoration: BoxDecoration(
-                  gradient: _isLiked ? NexoraGradients.romanticGlow : null,
-                  color: _isLiked ? null : NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(18.r),
-                  border: Border.all(
-                    color: _isLiked
-                        ? Colors.transparent
-                        : NexoraColors.romanticPink.withOpacity(0.5),
-                    width: 2.w,
-                  ),
-                  boxShadow: _isLiked
-                      ? [
+                tween: Tween(begin: 1.0, end: 1.0),
+                builder: (context, scale, child) => Transform.scale(
+                  scale: scale,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 56.r,
+                    height: 56.r,
+                    decoration: BoxDecoration(
+                      gradient: _isLiked ? NexoraGradients.romanticGlow : null,
+                      color: _isLiked ? null : NexoraColors.glassBackground,
+                      borderRadius: BorderRadius.circular(18.r),
+                      border: Border.all(
+                        color: _isLiked
+                            ? Colors.white.withOpacity(0.2)
+                            : NexoraColors.romanticPink.withOpacity(0.3),
+                        width: 1.5.w,
+                      ),
+                      boxShadow: [
+                        if (_isLiked)
                           BoxShadow(
                             color: NexoraColors.romanticPink.withOpacity(0.4),
-                            blurRadius: 15.r,
+                            blurRadius: 20.r,
+                            spreadRadius: 2.r,
                           ),
-                        ]
-                      : null,
-                ),
-                child: Icon(
-                  _isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: _isLiked ? Colors.white : NexoraColors.romanticPink,
-                  size: 28.r,
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 10.r,
+                          offset: Offset(0, 4.h),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Icon(
+                        _isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: _isLiked
+                            ? Colors.white
+                            : NexoraColors.romanticPink,
+                        size: 26.r,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1142,43 +1173,74 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
             SizedBox(width: 12.w),
 
-            // Message Button
+            // Message Button - Redesigned
             Expanded(
               child: GestureDetector(
                 onTap: _openChat,
                 child: Container(
-                  height: 60.h,
+                  height: 56.h,
                   decoration: BoxDecoration(
-                    gradient: NexoraGradients.primaryButton,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        NexoraColors.primaryPurple,
+                        NexoraColors.primaryPurple.withOpacity(0.8),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(18.r),
                     boxShadow: [
                       BoxShadow(
                         color: NexoraColors.primaryPurple.withOpacity(0.4),
-                        blurRadius: 20.r,
+                        blurRadius: 15.r,
                         offset: Offset(0, 8.h),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.1),
+                        blurRadius: 8.r,
+                        offset: Offset(-2.w, -2.h),
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Stack(
                     children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        color: Colors.white,
-                        size: 22.r,
-                      ),
-                      SizedBox(width: 10.w),
-                      Flexible(
-                        child: Text(
-                          'Send Message',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.bold,
+                      // Glossy overlay
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18.r),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white.withOpacity(0.15),
+                                Colors.transparent,
+                              ],
+                              stops: const [0.0, 0.5],
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          softWrap: false,
+                        ),
+                      ),
+                      Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              color: Colors.white,
+                              size: 20.r,
+                            ),
+                            SizedBox(width: 10.w),
+                            Text(
+                              'Message',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -1207,8 +1269,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         case ConnectionStatus.connected:
           icon = Icons.check_circle_rounded;
           label = 'Connected';
-          bgColor = NexoraColors.success.withOpacity(0.15);
-          borderColor = NexoraColors.success.withOpacity(0.3);
+          bgColor = NexoraColors.success;
+          borderColor = NexoraColors.success;
           contentColor = NexoraColors.success;
           onTap = () {
             _showDisconnectDialog();
@@ -1217,14 +1279,14 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         case ConnectionStatus.pending:
           icon = Icons.schedule_rounded;
           label = 'Pending';
-          bgColor = NexoraColors.textMuted.withOpacity(0.15);
-          borderColor = NexoraColors.textMuted.withOpacity(0.3);
+          bgColor = NexoraColors.textMuted;
+          borderColor = NexoraColors.textMuted;
           contentColor = NexoraColors.textSecondary;
           onTap = () {
             _connectionService.cancelRequest(widget.profile.id);
             Get.snackbar(
               'Request Cancelled',
-              'Connection request to ${widget.profile.name} cancelled',
+              'Connection request to ${widget.profile.displayName} cancelled',
               backgroundColor: NexoraColors.glassBackground,
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
@@ -1237,14 +1299,14 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         case ConnectionStatus.incoming:
           icon = Icons.person_add_alt_1_rounded;
           label = 'Accept';
-          bgColor = NexoraColors.success.withOpacity(0.15);
-          borderColor = NexoraColors.success.withOpacity(0.3);
+          bgColor = NexoraColors.success;
+          borderColor = NexoraColors.success;
           contentColor = NexoraColors.success;
           onTap = () {
             _connectionService.acceptRequest(widget.profile.id);
             Get.snackbar(
               'Connected!',
-              'You are now connected with ${widget.profile.name}',
+              'You are now connected with ${widget.profile.displayName}',
               backgroundColor: NexoraColors.success.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
@@ -1264,20 +1326,20 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
         case ConnectionStatus.none:
           icon = Icons.person_add_rounded;
           label = 'Connect';
-          bgColor = NexoraColors.accentCyan.withOpacity(0.15);
-          borderColor = NexoraColors.accentCyan.withOpacity(0.3);
+          bgColor = NexoraColors.accentCyan;
+          borderColor = NexoraColors.accentCyan;
           contentColor = NexoraColors.accentCyan;
           onTap = () {
             _connectionService.sendRequest(
               userId: widget.profile.id,
-              name: widget.profile.name,
+              name: widget.profile.displayName,
               avatar: widget.profile.avatar,
               major: widget.profile.major,
               year: widget.profile.year,
             );
             Get.snackbar(
               'Connection Request Sent',
-              'You sent a connection request to ${widget.profile.name}',
+              'You sent a connection request to ${widget.profile.displayName}',
               backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
               colorText: Colors.white,
               snackPosition: SnackPosition.TOP,
@@ -1298,18 +1360,28 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
       return GestureDetector(
         onTap: onTap,
         child: Container(
-          height: 60.h,
-          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          height: 56.h,
+          padding: EdgeInsets.symmetric(horizontal: 20.w),
           decoration: BoxDecoration(
-            color: bgColor,
+            color: bgColor.withOpacity(0.12),
             borderRadius: BorderRadius.circular(18.r),
-            border: Border.all(color: borderColor, width: 1.w),
+            border: Border.all(
+              color: borderColor.withOpacity(0.2),
+              width: 1.5.w,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8.r,
+                offset: Offset(0, 4.h),
+              ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: contentColor, size: 22.r),
+              Icon(icon, color: contentColor, size: 20.r),
               SizedBox(width: 8.w),
               Flexible(
                 child: Text(
@@ -1318,6 +1390,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                     color: contentColor,
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.1,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,

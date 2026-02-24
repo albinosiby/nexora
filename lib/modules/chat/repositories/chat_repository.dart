@@ -67,6 +67,9 @@ class ChatRepository extends GetxService {
     MessageType type = MessageType.text,
     String? mediaUrl,
     int? duration,
+    String? replyToId,
+    String? replyToContent,
+    String? replyToSenderId,
   }) async {
     if (currentUserId == null) return;
 
@@ -82,6 +85,9 @@ class ChatRepository extends GetxService {
       mediaUrl: mediaUrl,
       timestamp: DateTime.now(),
       duration: duration,
+      replyToId: replyToId,
+      replyToContent: replyToContent,
+      replyToSenderId: replyToSenderId,
     );
 
     await messageRef.set(message.toJson());
@@ -178,5 +184,14 @@ class ChatRepository extends GetxService {
         .ref('chats/$chatId/typingStatus/$userId')
         .onValue
         .map((event) => event.snapshot.value as bool? ?? false);
+  }
+
+  /// Add or remove a reaction on a message
+  Future<void> addReaction(
+    String chatId,
+    String messageId,
+    String? reaction,
+  ) async {
+    await _db.ref('messages/$chatId/$messageId/reaction').set(reaction);
   }
 }

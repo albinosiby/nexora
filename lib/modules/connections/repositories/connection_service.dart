@@ -181,7 +181,7 @@ class ConnectionService extends GetxController {
         'id': requestId,
         'fromId': currentUserId,
         'toId': userId,
-        'fromName': currentUser.name,
+        'fromName': currentUser.displayName,
         'fromAvatar': currentUser.avatar ?? '',
         'fromMajor': currentUser.major ?? '',
         'fromYear': currentUser.year ?? '',

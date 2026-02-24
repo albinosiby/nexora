@@ -105,4 +105,30 @@ class UserRepository extends GetxService {
     // Refresh local profile state from Firestore
     await _auth.refreshProfile();
   }
+
+  /// Check if a username is already taken by another user
+  Future<bool> isUsernameTaken(String username) async {
+    if (username.isEmpty) return false;
+    final query = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase())
+        .get();
+    // Exclude the current user from results
+    final otherUsers = query.docs.where((doc) => doc.id != currentUserId);
+    return otherUsers.isNotEmpty;
+  }
+
+  /// Submit feedback to Firestore
+  Future<void> submitFeedback(String category, String message) async {
+    if (currentUserId == null) return;
+
+    await _firestore.collection('feedback').add({
+      'userId': currentUserId,
+      'userName': currentUser.name,
+      'userEmail': currentUser.email,
+      'category': category,
+      'message': message,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
 }

@@ -4,7 +4,6 @@ import '../models/match_user_model.dart';
 import '../../auth/repositories/auth_repository.dart';
 
 /// MatchRepository provides realtime user data for the discover/matching screen.
-/// Uses Firestore as the primary source, falls back to DummyDatabase for development.
 class MatchRepository extends GetxService {
   static MatchRepository get instance => Get.find<MatchRepository>();
 
@@ -14,7 +13,6 @@ class MatchRepository extends GetxService {
   String? get _currentUserId => _auth.user?.uid;
 
   /// Realtime stream of all users (excluding current user) from Firestore.
-  /// Falls back to DummyDatabase if Firestore collection is empty.
   Stream<List<MatchUserModel>> getUsersStream() {
     return _firestore
         .collection('users')

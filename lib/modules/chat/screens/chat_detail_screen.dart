@@ -77,6 +77,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _isUploadingAudio = false;
   bool _showEmojiKeyboard = false;
 
+  // Reply
+  MessageModel? _replyingToMessage;
+
   @override
   void initState() {
     super.initState();
@@ -195,7 +198,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     if (_activeChatId == null) {
       if (widget.participantId == null) return;
-      // Create chat first
       final newChatId = await _chatRepo.createChat(widget.participantId!);
       if (newChatId.isEmpty) return;
 
@@ -205,8 +207,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _setupStreams();
     }
 
+    // Capture reply before clearing state for optimistic feel
+    final replyMsg = _replyingToMessage;
     _messageController.clear();
-    await _chatRepo.sendMessage(chatId: _activeChatId!, content: text);
+    setState(() => _replyingToMessage = null);
+
+    await _chatRepo.sendMessage(
+      chatId: _activeChatId!,
+      content: text,
+      replyToId: replyMsg?.id,
+      replyToContent: replyMsg?.content,
+      replyToSenderId: replyMsg?.senderId,
+    );
     _scrollToBottom();
   }
 
@@ -336,6 +348,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _setupStreams();
     }
 
+    // Capture reply before clearing
+    final replyMsg = _replyingToMessage;
+    setState(() => _replyingToMessage = null);
+
     try {
       final file = File(path);
       if (!await file.exists()) {
@@ -352,11 +368,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       setState(() => _isUploadingAudio = true);
       _scrollToBottom();
 
-      Get.rawSnackbar(
-        message: 'Sending voice message...',
-        duration: const Duration(seconds: 2),
-        snackPosition: SnackPosition.TOP,
-      );
       final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final storagePath = 'chats/$_activeChatId/voice/$fileName';
 
@@ -368,6 +379,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         type: MessageType.voice,
         mediaUrl: downloadUrl,
         duration: duration,
+        replyToId: replyMsg?.id,
+        replyToContent: replyMsg?.content,
+        replyToSenderId: replyMsg?.senderId,
       );
       _scrollToBottom();
     } catch (e) {
@@ -392,23 +406,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
-  void _addReaction(String messageId, String reaction) {
-    // This would typically be a repository call
+  void _addReaction(String messageId, String reaction) async {
     Get.back();
-    Get.snackbar(
-      'Reaction',
-      'Added $reaction',
-      backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 1),
-    );
+    if (_activeChatId == null) return;
+
+    // Find message to toggle reaction
+    final msg = _messages.firstWhereOrNull((m) => m.id == messageId);
+    final newReaction = (msg?.reaction == reaction) ? null : reaction;
+
+    await _chatRepo.addReaction(_activeChatId!, messageId, newReaction);
   }
 
   @override
@@ -536,6 +549,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         profile: ProfileModel(
           id: 'user_${widget.name.toLowerCase().replaceAll(' ', '_')}',
           name: widget.name,
+          username: widget.name,
           email:
               '${widget.name.toLowerCase().replaceAll(' ', '.')}@example.com',
           avatar: widget.avatar,

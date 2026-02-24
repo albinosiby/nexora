@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,7 @@ import '../../auth/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/spotify_search_modal.dart';
 import '../../../../core/services/spotify_service.dart';
+import '../../settings/screens/settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -482,47 +484,40 @@ class _ProfileScreenState extends State<ProfileScreen>
         () => Stack(
           children: [
             // Animated background gradients
-            Positioned.fill(
-              child: Stack(
-                children: [
-                  Positioned(
-                    top: -100.h,
-                    right: -100.w,
-                    child: Container(
-                      width: 300.r,
-                      height: 300.r,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            NexoraColors.primaryPurple.withOpacity(0.2),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
+            Positioned(
+              top: -100.h,
+              right: -100.w,
+              child: Container(
+                width: 300.r,
+                height: 300.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      NexoraColors.primaryPurple.withOpacity(0.2),
+                      Colors.transparent,
+                    ],
                   ),
-                  Positioned(
-                    bottom: 100.h,
-                    left: -50.w,
-                    child: Container(
-                      width: 200.r,
-                      height: 200.r,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            NexoraColors.romanticPink.withOpacity(0.1),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-
+            Positioned(
+              bottom: 100.h,
+              left: -50.w,
+              child: Container(
+                width: 200.r,
+                height: 200.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      NexoraColors.romanticPink.withOpacity(0.1),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
             SafeArea(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -1189,7 +1184,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                     // App Version
                     Text(
-                      'NEXORA v1.0.0',
+                      'Kootu v1.0.0',
                       style: TextStyle(
                         color: NexoraColors.textMuted.withOpacity(0.5),
                         fontSize: 10.sp,
@@ -1201,8 +1196,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
             ),
+
+            // Settings Icon (must be last in Stack to be tappable)
+            Positioned(
+              top: 10.h,
+              right: 10.w,
+              child: SafeArea(
+                child: _buildHeaderIcon(
+                  Icons.settings_outlined,
+                  onTap: () => Get.to(() => const SettingsScreen()),
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderIcon(IconData icon, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.all(8.r),
+        decoration: BoxDecoration(
+          color: NexoraColors.glassBackground,
+          shape: BoxShape.circle,
+          border: Border.all(color: NexoraColors.glassBorder),
+        ),
+        child: Icon(icon, color: NexoraColors.textPrimary, size: 20.r),
       ),
     );
   }
@@ -1292,12 +1314,19 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     with SingleTickerProviderStateMixin {
   late TextEditingController nameController;
   late TextEditingController bioController;
+  late TextEditingController usernameController;
   late TextEditingController yearController;
   late TextEditingController majorController;
   late TextEditingController instagramController;
   late TextEditingController spotifyController;
   late TextEditingController spotifyTrackController;
   late TextEditingController spotifyArtistController;
+
+  // Username validation state
+  String? _usernameError;
+  bool _isCheckingUsername = false;
+  bool _isUsernameValid = false;
+  Timer? _usernameDebounce;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -1416,6 +1445,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     super.initState();
     nameController = TextEditingController(text: widget.profile.name);
     bioController = TextEditingController(text: widget.profile.bio);
+    usernameController = TextEditingController(text: widget.profile.username);
+    // Mark existing username as valid initially
+    if (widget.profile.username.isNotEmpty) _isUsernameValid = true;
     yearController = TextEditingController(text: widget.profile.year);
     majorController = TextEditingController(text: widget.profile.major);
     instagramController = TextEditingController(
@@ -1456,14 +1488,111 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     // Add listeners for profile completion updates
     nameController.addListener(_updateState);
     bioController.addListener(_updateState);
+    usernameController.addListener(_onUsernameChanged);
   }
 
   void _updateState() => setState(() {});
 
+  void _onUsernameChanged() {
+    _usernameDebounce?.cancel();
+    final username = usernameController.text.trim().toLowerCase();
+
+    // Basic format validation
+    if (username.isEmpty) {
+      setState(() {
+        _usernameError = null;
+        _isCheckingUsername = false;
+        _isUsernameValid = false;
+      });
+      return;
+    }
+
+    if (username.length < 3) {
+      setState(() {
+        _usernameError = 'Min 3 characters';
+        _isCheckingUsername = false;
+        _isUsernameValid = false;
+      });
+      return;
+    }
+
+    final validPattern = RegExp(r'^[a-z0-9._]+$');
+    if (!validPattern.hasMatch(username)) {
+      setState(() {
+        _usernameError = 'Only lowercase letters, numbers, . and _';
+        _isCheckingUsername = false;
+        _isUsernameValid = false;
+      });
+      return;
+    }
+
+    // If it's the same as current username, no need to check
+    if (username == widget.profile.username.toLowerCase()) {
+      setState(() {
+        _usernameError = null;
+        _isCheckingUsername = false;
+        _isUsernameValid = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _isCheckingUsername = true;
+      _usernameError = null;
+      _isUsernameValid = false;
+    });
+
+    _usernameDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final taken = await UserRepository.instance.isUsernameTaken(username);
+      if (!mounted) return;
+      setState(() {
+        _isCheckingUsername = false;
+        if (taken) {
+          _usernameError = 'Username already taken';
+          _isUsernameValid = false;
+        } else {
+          _usernameError = null;
+          _isUsernameValid = true;
+        }
+      });
+    });
+  }
+
   // Removed _loadPreferences to use widget.profile exclusively
 
   Future<void> _saveProfile() async {
+    // Block save if username is taken
+    if (_usernameError != null) {
+      Get.snackbar(
+        'Invalid Username',
+        _usernameError!,
+        backgroundColor: NexoraColors.error.withOpacity(0.9),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 2),
+        margin: EdgeInsets.all(16.r),
+        borderRadius: 12.r,
+        icon: const Icon(Icons.error_outline, color: Colors.white),
+      );
+      return;
+    }
+
+    if (_isCheckingUsername) {
+      Get.snackbar(
+        'Please Wait',
+        'Checking username availability...',
+        backgroundColor: NexoraColors.cardBackground,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 1),
+        margin: EdgeInsets.all(16.r),
+        borderRadius: 12.r,
+      );
+      return;
+    }
+
     final String name = nameController.text;
+    final String username = usernameController.text.trim().toLowerCase();
     final String bio = bioController.text;
     final String year = yearController.text;
     final String major = majorController.text;
@@ -1475,6 +1604,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
     final updatedProfile = widget.profile.copyWith(
       name: name,
+      username: username,
       bio: bio,
       year: year,
       major: major,
@@ -1552,16 +1682,16 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         children: [
           // Animated background gradients
           Positioned(
-            top: -80,
-            right: -80,
+            top: -100.h,
+            right: -100.w,
             child: Container(
-              width: 250,
-              height: 250,
+              width: 300.r,
+              height: 300.r,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.15),
+                    NexoraColors.primaryPurple.withOpacity(0.2),
                     Colors.transparent,
                   ],
                 ),
@@ -1569,23 +1699,22 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             ),
           ),
           Positioned(
-            bottom: 150,
-            left: -60,
+            bottom: 150.h,
+            left: -80.w,
             child: Container(
-              width: 180,
-              height: 180,
+              width: 250.r,
+              height: 250.r,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    NexoraColors.romanticPink.withOpacity(0.1),
+                    NexoraColors.romanticPink.withOpacity(0.12),
                     Colors.transparent,
                   ],
                 ),
               ),
             ),
           ),
-
           // Main content
           SafeArea(
             child: Column(
@@ -2026,6 +2155,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
             hint: 'What should people call you?',
           ),
           SizedBox(height: 20.h),
+          // Username field with validation
+          _buildUsernameField(),
+          SizedBox(height: 20.h),
           _buildTextField(
             label: 'Bio',
             controller: bioController,
@@ -2231,37 +2363,13 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       child: Column(
         children: [
           _buildSocialField(
-            label: 'Instagram',
-            controller: instagramController,
-            icon: Icons.camera_alt_outlined,
-            color: const Color(0xFFE4405F),
-            prefix: '@',
-            hint: 'username',
-          ),
-          SizedBox(height: 16.h),
-          _buildSocialField(
             label: 'Spotify Profile URL',
             controller: spotifyController,
             icon: Icons.link,
             color: const Color(0xFF1DB954),
             hint: 'spotify.com/user/...',
           ),
-          SizedBox(height: 16.h),
-          _buildSocialField(
-            label: 'Favorite Track Name',
-            controller: spotifyTrackController,
-            icon: Icons.music_note,
-            color: const Color(0xFF1DB954),
-            hint: 'e.g. Blinding Lights',
-          ),
-          SizedBox(height: 16.h),
-          _buildSocialField(
-            label: 'Favorite Artist',
-            controller: spotifyArtistController,
-            icon: Icons.person_outline,
-            color: const Color(0xFF1DB954),
-            hint: 'e.g. The Weeknd',
-          ),
+
           SizedBox(height: 20.h),
           ElevatedButton.icon(
             onPressed: _showSpotifySearchModal,
@@ -2511,12 +2619,107 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
+  Widget _buildUsernameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Username',
+              style: TextStyle(color: NexoraColors.textMuted, fontSize: 12.sp),
+            ),
+            if (_isCheckingUsername)
+              SizedBox(
+                width: 14.r,
+                height: 14.r,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.w,
+                  color: NexoraColors.accentCyan,
+                ),
+              )
+            else if (_isUsernameValid && usernameController.text.isNotEmpty)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    color: NexoraColors.success,
+                    size: 14.r,
+                  ),
+                  SizedBox(width: 4.w),
+                  Text(
+                    'Available',
+                    style: TextStyle(
+                      color: NexoraColors.success,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ],
+              )
+            else if (_usernameError != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.cancel, color: NexoraColors.error, size: 14.r),
+                  SizedBox(width: 4.w),
+                  Text(
+                    _usernameError!,
+                    style: TextStyle(
+                      color: NexoraColors.error,
+                      fontSize: 11.sp,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        SizedBox(height: 8.h),
+        Container(
+          decoration: BoxDecoration(
+            color: NexoraColors.cardBackground,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(
+              color: _usernameError != null
+                  ? NexoraColors.error.withOpacity(0.5)
+                  : _isUsernameValid && usernameController.text.isNotEmpty
+                  ? NexoraColors.success.withOpacity(0.5)
+                  : NexoraColors.cardBorder,
+              width: 1.w,
+            ),
+          ),
+          child: TextField(
+            controller: usernameController,
+            style: const TextStyle(color: NexoraColors.textPrimary),
+            decoration: InputDecoration(
+              prefixIcon: Icon(
+                Icons.alternate_email,
+                color: NexoraColors.primaryPurple,
+                size: 20.r,
+              ),
+              hintText: 'Choose a unique username',
+              hintStyle: TextStyle(
+                color: NexoraColors.textMuted.withOpacity(0.5),
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.all(16.w),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     nameController.removeListener(_updateState);
     bioController.removeListener(_updateState);
+    usernameController.removeListener(_onUsernameChanged);
+    _usernameDebounce?.cancel();
     nameController.dispose();
     bioController.dispose();
+    usernameController.dispose();
     yearController.dispose();
     majorController.dispose();
     instagramController.dispose();
