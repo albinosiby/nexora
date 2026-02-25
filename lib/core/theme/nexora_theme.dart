@@ -11,9 +11,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 class NexoraColors {
   // ---------------- BACKGROUND GRADIENTS ----------------
-  static const Color midnightDark = Color(0xFF0A0A14); // Deep midnight
-  static const Color midnightPurple = Color(0xFF14142B); // Purple-tinted night
-  static const Color midnightBlue = Color(0xFF1C1C3A); // Blue-tinted depth
+  static const Color midnightDark = Color(0xFF000000); // Pure Black
+  static const Color midnightPurple = Color(
+    0xFF080812,
+  ); // Extremely Deep Purple
+  static const Color midnightBlue = Color(0xFF0A0A1A); // Extremely Deep Blue
 
   // ---------------- PRIMARY BRAND COLORS ----------------
   static const Color primaryPurple = Color(0xFF9D4EDD); // Main NEXORA purple
@@ -37,16 +39,14 @@ class NexoraColors {
   static const Color textDark = Color(0xFF666666); // Dark gray
 
   // ---------------- CARD/CONTAINER COLORS (Solid UI) ----------------
-  static const Color cardBackground = Color(
-    0xFF1E1E2E,
-  ); // Solid card background
-  static const Color cardBorder = Color(0xFF2E2E42); // Solid card border
-  static const Color cardSurface = Color(0xFF252538); // Elevated surface
+  static const Color cardBackground = Color(0xFF121212); // Neutral dark gray
+  static const Color cardBorder = Color(0xFF2A2A2A); // Distinct border
+  static const Color cardSurface = Color(0xFF1E1E1E); // Elevated surface
 
   // ---------------- GLASS EFFECT COLORS (Legacy - mapped to solid) ----------------
-  static Color glassBackground = const Color(0xFF1E1E2E); // Now solid
-  static Color glassBorder = const Color(0xFF2E2E42); // Now solid
-  static Color glassHighlight = const Color(0xFF252538); // Now solid
+  static Color glassBackground = const Color(0xFF121212); // Now solid
+  static Color glassBorder = const Color(0xFF2A2A2A); // Now solid
+  static Color glassHighlight = const Color(0xFF1E1E1E); // Now solid
 
   // ---------------- STATUS COLORS ----------------
   static const Color success = Color(0xFF4CAF50);

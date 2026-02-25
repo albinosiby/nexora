@@ -40,7 +40,9 @@ class PostModel {
     this.updatedAt,
   });
 
-  String get displayName => username.isNotEmpty ? username : user;
+  String get displayName => username.isNotEmpty
+      ? username
+      : '@${user.toLowerCase().replaceAll(' ', '.')}';
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {
@@ -168,8 +170,9 @@ class CommentModel {
     this.replies = const [],
   });
 
-  String get displayName =>
-      username.isNotEmpty ? username : user.toLowerCase().replaceAll(' ', '.');
+  String get displayName => username.isNotEmpty
+      ? username
+      : '@${user.toLowerCase().replaceAll(' ', '.')}';
 
   factory CommentModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {
@@ -255,8 +258,9 @@ class ReplyModel {
     required this.createdAt,
   });
 
-  String get displayName =>
-      username.isNotEmpty ? username : user.toLowerCase().replaceAll(' ', '.');
+  String get displayName => username.isNotEmpty
+      ? username
+      : '@${user.toLowerCase().replaceAll(' ', '.')}';
 
   factory ReplyModel.fromJson(Map<String, dynamic> json) {
     DateTime _parseDate(dynamic date) {

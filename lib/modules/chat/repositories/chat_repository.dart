@@ -119,11 +119,10 @@ class ChatRepository extends GetxService {
     }
   }
 
-  /// Create new chat
-  Future<String> createChat(String otherUserId) async {
-    if (currentUserId == null) return '';
+  /// Find an existing chat with another user
+  Future<String?> findExistingChat(String otherUserId) async {
+    if (currentUserId == null) return null;
 
-    // Check if chat already exists
     final userChats = await _db.ref('user_chats/$currentUserId').get();
     if (userChats.exists) {
       final data = Map<String, dynamic>.from(userChats.value as Map);
@@ -138,6 +137,16 @@ class ChatRepository extends GetxService {
         }
       }
     }
+    return null;
+  }
+
+  /// Create new chat
+  Future<String> createChat(String otherUserId) async {
+    if (currentUserId == null) return '';
+
+    // Check if chat already exists
+    final existingChatId = await findExistingChat(otherUserId);
+    if (existingChatId != null) return existingChatId;
 
     // Create new
     final chatRef = _db.ref('chats').push();

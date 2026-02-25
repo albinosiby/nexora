@@ -10,6 +10,7 @@ class UserModel {
   final String? year;
   final String? major;
   final List<String> interests;
+  final int age;
   final bool isOnline;
   final int followers;
   final int following;
@@ -40,6 +41,7 @@ class UserModel {
     this.year,
     this.major,
     this.interests = const [],
+    this.age = 18,
     this.isOnline = false,
     this.followers = 0,
     this.following = 0,
@@ -75,6 +77,7 @@ class UserModel {
       year: json['year'],
       major: json['major'],
       interests: List<String>.from(json['interests'] ?? []),
+      age: json['age'] ?? 18,
       isOnline: json['isOnline'] ?? false,
       followers: json['followers'] ?? 0,
       following: json['following'] ?? 0,
@@ -115,6 +118,7 @@ class UserModel {
       'year': year,
       'major': major,
       'interests': interests,
+      'age': age,
       'isOnline': isOnline,
       'followers': followers,
       'following': following,
@@ -149,6 +153,7 @@ class UserModel {
       'year': year,
       'major': major,
       'interests': interests,
+      'age': age,
       'isOnline': isOnline,
       'followers': followers,
       'following': following,
@@ -196,6 +201,7 @@ class UserModel {
     bool? isOnline,
     int? followers,
     int? following,
+    int? age,
     int? posts,
     String? instagram,
     String? spotify,
@@ -226,6 +232,7 @@ class UserModel {
       isOnline: isOnline ?? this.isOnline,
       followers: followers ?? this.followers,
       following: following ?? this.following,
+      age: age ?? this.age,
       posts: posts ?? this.posts,
       instagram: instagram ?? this.instagram,
       spotify: spotify ?? this.spotify,

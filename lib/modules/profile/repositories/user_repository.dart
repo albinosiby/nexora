@@ -70,6 +70,13 @@ class UserRepository extends GetxService {
     });
   }
 
+  /// Stream of user presence (online status) from RTDB
+  Stream<bool> getUserPresenceStream(String userId) {
+    return _db.ref('users/$userId/isOnline').onValue.map((event) {
+      return event.snapshot.value as bool? ?? false;
+    });
+  }
+
   /// Get search results from Firestore
   Future<List<ProfileModel>> searchUsers(String query) async {
     final results = await _firestore

@@ -85,10 +85,26 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     super.initState();
     _activeChatId = widget.chatId;
     _initializeControllers();
-    _setupStreams();
-    _markAsRead();
+    _initializeChat();
     // Pre-emptively check for microphone permission
     _checkPermission();
+  }
+
+  Future<void> _initializeChat() async {
+    if (_activeChatId == null && widget.participantId != null) {
+      final existingChatId = await _chatRepo.findExistingChat(
+        widget.participantId!,
+      );
+      if (existingChatId != null) {
+        if (mounted) {
+          setState(() {
+            _activeChatId = existingChatId;
+          });
+        }
+      }
+    }
+    _setupStreams();
+    _markAsRead();
   }
 
   Future<void> _checkPermission() async {
@@ -440,12 +456,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     : ListView.builder(
                         controller: _scrollController,
                         padding: EdgeInsets.all(20.r),
-                        itemCount:
-                            _messages.length + (_isUploadingAudio ? 1 : 0),
+                        itemCount: _messages.length,
                         itemBuilder: (context, index) {
-                          if (index == _messages.length) {
-                            return _buildUploadingBubble();
-                          }
                           return _buildMessageBubble(_messages[index], index);
                         },
                       ),
@@ -739,137 +751,145 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _buildMessageInput() {
     final hasText = _messageController.text.trim().isNotEmpty;
 
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            NexoraColors.midnightDark.withOpacity(0.8),
-            NexoraColors.midnightDark,
-          ],
-        ),
-        border: Border(
-          top: BorderSide(color: NexoraColors.glassBorder.withOpacity(0.3)),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            // Attachment button
-            GestureDetector(
-              onTap: _showAttachmentOptions,
-              child: Container(
-                width: 44.r,
-                height: 44.r,
-                decoration: BoxDecoration(
-                  color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(22.r),
-                  border: Border.all(color: NexoraColors.glassBorder),
-                ),
-                child: Icon(
-                  Icons.add,
-                  color: NexoraColors.primaryPurple,
-                  size: 24.r,
-                ),
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildReplyPreview(),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                NexoraColors.midnightDark.withOpacity(0.8),
+                NexoraColors.midnightDark,
+              ],
             ),
-            SizedBox(width: 12.w),
+            border: Border(
+              top: BorderSide(color: NexoraColors.glassBorder.withOpacity(0.3)),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Attachment button
+                GestureDetector(
+                  onTap: _showAttachmentOptions,
+                  child: Container(
+                    width: 40.r,
+                    height: 40.r,
+                    decoration: BoxDecoration(
+                      color: NexoraColors.glassBackground,
+                      borderRadius: BorderRadius.circular(20.r),
+                      border: Border.all(color: NexoraColors.glassBorder),
+                    ),
+                    child: Icon(
+                      Icons.add,
+                      color: NexoraColors.primaryPurple,
+                      size: 24.r,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 12.w),
 
-            // Text input
-            Expanded(
-              child: Container(
-                constraints: BoxConstraints(maxHeight: 120.h),
-                decoration: BoxDecoration(
-                  color: NexoraColors.glassBackground,
-                  borderRadius: BorderRadius.circular(24.r),
-                  border: Border.all(color: NexoraColors.glassBorder),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        focusNode: _focusNode,
-                        style: TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontSize: 16.sp,
-                        ),
-                        maxLines: 5,
-                        minLines: 1,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: InputDecoration(
-                          hintText: "Message...",
-                          hintStyle: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 16.sp,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16.w,
-                            vertical: 12.h,
-                          ),
-                        ),
-                        onChanged: (_) => setState(() {}),
-                        onSubmitted: (_) => _sendMessage(),
-                      ),
+                // Text input
+                Expanded(
+                  child: Container(
+                    constraints: BoxConstraints(maxHeight: 100.h),
+                    decoration: BoxDecoration(
+                      color: NexoraColors.glassBackground,
+                      borderRadius: BorderRadius.circular(20.r),
+                      border: Border.all(color: NexoraColors.glassBorder),
                     ),
-                    GestureDetector(
-                      onTap: _showEmojiPicker,
-                      child: Padding(
-                        padding: EdgeInsets.only(right: 8.w, bottom: 10.h),
-                        child: Icon(
-                          _showEmojiKeyboard
-                              ? Icons.keyboard_rounded
-                              : Icons.emoji_emotions_outlined,
-                          color: _showEmojiKeyboard
-                              ? NexoraColors.primaryPurple
-                              : NexoraColors.textMuted,
-                          size: 24.r,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _focusNode,
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontSize: 16.sp,
+                            ),
+                            maxLines: 5,
+                            minLines: 1,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: InputDecoration(
+                              hintText: "Message...",
+                              hintStyle: TextStyle(
+                                color: NexoraColors.textMuted,
+                                fontSize: 16.sp,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16.w,
+                                vertical: 8.h,
+                              ),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                            onSubmitted: (_) => _sendMessage(),
+                          ),
                         ),
-                      ),
+                        GestureDetector(
+                          onTap: _showEmojiPicker,
+                          child: Padding(
+                            padding: EdgeInsets.only(right: 8.w, bottom: 10.h),
+                            child: Icon(
+                              _showEmojiKeyboard
+                                  ? Icons.keyboard_rounded
+                                  : Icons.emoji_emotions_outlined,
+                              color: _showEmojiKeyboard
+                                  ? NexoraColors.primaryPurple
+                                  : NexoraColors.textMuted,
+                              size: 24.r,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            SizedBox(width: 12.w),
+                SizedBox(width: 12.w),
 
-            // Send or Voice button
-            GestureDetector(
-              onTap: hasText ? _sendMessage : null,
-              onLongPressStart: hasText ? null : _startRecording,
-              onLongPressMoveUpdate: hasText ? null : _onLongPressMoveUpdate,
-              onLongPressEnd: hasText ? null : (_) => _stopRecording(),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 48.r,
-                height: 48.r,
-                decoration: BoxDecoration(
-                  gradient: NexoraGradients.primaryButton,
-                  borderRadius: BorderRadius.circular(24.r),
-                  boxShadow: [
-                    BoxShadow(
-                      color: NexoraColors.primaryPurple.withOpacity(0.4),
-                      blurRadius: 12.r,
-                      offset: Offset(0, 4.h),
+                // Send or Voice button
+                GestureDetector(
+                  onTap: hasText ? _sendMessage : null,
+                  onLongPressStart: hasText ? null : _startRecording,
+                  onLongPressMoveUpdate: hasText
+                      ? null
+                      : _onLongPressMoveUpdate,
+                  onLongPressEnd: hasText ? null : (_) => _stopRecording(),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 44.r,
+                    height: 44.r,
+                    decoration: BoxDecoration(
+                      gradient: NexoraGradients.primaryButton,
+                      borderRadius: BorderRadius.circular(22.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: NexoraColors.primaryPurple.withOpacity(0.4),
+                          blurRadius: 12.r,
+                          offset: Offset(0, 4.h),
+                        ),
+                      ],
                     ),
-                  ],
+                    child: Icon(
+                      hasText ? Icons.send_rounded : Icons.mic_rounded,
+                      color: Colors.white,
+                      size: 22.r,
+                    ),
+                  ),
                 ),
-                child: Icon(
-                  hasText ? Icons.send_rounded : Icons.mic_rounded,
-                  color: Colors.white,
-                  size: 22.r,
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1462,170 +1482,237 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final senderChanged =
         index > 0 && _messages[index - 1].senderId != message.senderId;
 
-    return GestureDetector(
-      onLongPress: () => _showReactionSheet(message),
-      child: Container(
-        margin: EdgeInsets.only(
-          left: isSender ? 60.w : 0,
-          right: isSender ? 0 : 60.w,
-          top: senderChanged ? 16.h : 0,
-          bottom: 8.h,
+    return Dismissible(
+      key: Key(message.id),
+      direction: DismissDirection.startToEnd,
+      confirmDismiss: (direction) async {
+        setState(() => _replyingToMessage = message);
+        return false; // Don't actually dismiss
+      },
+      background: Container(
+        padding: EdgeInsets.only(left: 20.w),
+        alignment: Alignment.centerLeft,
+        child: Icon(
+          Icons.reply_rounded,
+          color: NexoraColors.primaryPurple,
+          size: 24.r,
         ),
-        child: Row(
-          mainAxisAlignment: isSender
-              ? MainAxisAlignment.end
-              : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!isSender && showAvatar)
-              _buildSenderAvatar()
-            else if (!isSender)
-              SizedBox(width: 38.w),
-            Flexible(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    padding: message.type == MessageType.voice
-                        ? EdgeInsets.all(10.r)
-                        : EdgeInsets.symmetric(
-                            horizontal: 14.w,
-                            vertical: 10.h,
-                          ),
-                    decoration: BoxDecoration(
-                      gradient: isSender
-                          ? LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                NexoraColors.primaryPurple,
-                                NexoraColors.primaryPurple.withOpacity(0.85),
-                              ],
-                            )
-                          : null,
-                      color: isSender ? null : NexoraColors.glassBackground,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(18.r),
-                        topRight: Radius.circular(18.r),
-                        bottomLeft: Radius.circular(isSender ? 18.r : 4.r),
-                        bottomRight: Radius.circular(isSender ? 4.r : 18.r),
-                      ),
-                      border: isSender
-                          ? null
-                          : Border.all(color: NexoraColors.glassBorder),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isSender
-                              ? NexoraColors.primaryPurple.withOpacity(0.25)
-                              : Colors.black.withOpacity(0.15),
-                          blurRadius: 8.r,
-                          offset: Offset(0, 3.h),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (message.type == MessageType.voice)
-                          _buildAudioMessage(message)
-                        else if (message.type == MessageType.image)
-                          _buildImageMessage(message)
-                        else
-                          Text(
-                            message.content,
-                            style: TextStyle(
-                              color: isSender
-                                  ? Colors.white
-                                  : NexoraColors.textPrimary,
-                              fontSize: 15.sp,
-                              height: 1.4,
+      ),
+      child: GestureDetector(
+        onLongPress: () => _showReactionSheet(message),
+        child: Container(
+          margin: EdgeInsets.only(
+            left: isSender ? 60.w : 0,
+            right: isSender ? 0 : 60.w,
+            top: senderChanged ? 16.h : 0,
+            bottom: 4.h,
+          ),
+          child: Row(
+            mainAxisAlignment: isSender
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isSender && showAvatar)
+                _buildSenderAvatar()
+              else if (!isSender)
+                SizedBox(width: 38.w),
+              Flexible(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      padding: message.type == MessageType.voice
+                          ? EdgeInsets.all(6.r)
+                          : EdgeInsets.symmetric(
+                              horizontal: 14.w,
+                              vertical: 6.h,
                             ),
+                      decoration: BoxDecoration(
+                        gradient: isSender
+                            ? LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  NexoraColors.deepPurple,
+                                  NexoraColors.primaryPurple.withOpacity(0.9),
+                                ],
+                              )
+                            : null,
+                        color: isSender ? null : NexoraColors.glassBackground,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(18.r),
+                          topRight: Radius.circular(18.r),
+                          bottomLeft: Radius.circular(isSender ? 18.r : 4.r),
+                          bottomRight: Radius.circular(isSender ? 4.r : 18.r),
+                        ),
+                        border: isSender
+                            ? null
+                            : Border.all(color: NexoraColors.glassBorder),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isSender
+                                ? NexoraColors.primaryPurple.withOpacity(0.25)
+                                : Colors.black.withOpacity(0.15),
+                            blurRadius: 8.r,
+                            offset: Offset(0, 3.h),
                           ),
-                        SizedBox(height: 4.h),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (message.replyToContent != null)
+                            _buildReplyContext(message),
+                          if (message.type == MessageType.voice)
+                            _buildAudioMessage(message)
+                          else if (message.type == MessageType.image)
+                            _buildImageMessage(message)
+                          else
                             Text(
-                              _formatTime(message.timestamp),
+                              message.content,
                               style: TextStyle(
                                 color: isSender
-                                    ? Colors.white.withOpacity(0.7)
-                                    : NexoraColors.textMuted,
-                                fontSize: 10.sp,
+                                    ? Colors.white
+                                    : NexoraColors.textPrimary,
+                                fontSize: 15.sp,
+                                height: 1.2,
                               ),
                             ),
-                            if (isSender) _buildStatusIcon(message.isRead),
-                          ],
-                        ),
-                      ],
+                          SizedBox(height: 4.h),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _formatTime(message.timestamp),
+                                style: TextStyle(
+                                  color: isSender
+                                      ? Colors.white.withOpacity(0.7)
+                                      : NexoraColors.textMuted,
+                                  fontSize: 10.sp,
+                                ),
+                              ),
+                              if (isSender) _buildStatusIcon(message.isRead),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (message.reaction != null)
-                    Positioned(
-                      bottom: -10.h,
-                      right: isSender ? 0 : null,
-                      left: isSender ? null : 0,
-                      child: _buildReactionBadge(message.reaction!),
-                    ),
-                ],
+                    if (message.reaction != null)
+                      Positioned(
+                        bottom: -10.h,
+                        right: isSender ? 0 : null,
+                        left: isSender ? null : 0,
+                        child: _buildReactionBadge(message.reaction!),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildUploadingBubble() {
+  Widget _buildReplyContext(MessageModel message) {
+    final isSender = message.senderId == _chatRepo.currentUserId;
     return Container(
-      margin: EdgeInsets.only(left: 60.w, top: 4.h, bottom: 8.h),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      margin: EdgeInsets.only(bottom: 8.h),
+      padding: EdgeInsets.all(8.r),
+      decoration: BoxDecoration(
+        color: (isSender ? Colors.black : NexoraColors.primaryPurple)
+            .withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.r),
+        border: Border(
+          left: BorderSide(
+            color: isSender ? Colors.white70 : NexoraColors.primaryPurple,
+            width: 3.w,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Flexible(
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
-              decoration: BoxDecoration(
-                color: NexoraColors.glassBackground,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(18.r),
-                  topRight: Radius.circular(18.r),
-                  bottomLeft: Radius.circular(18.r),
-                  bottomRight: Radius.circular(4.r),
-                ),
-                border: Border.all(color: NexoraColors.glassBorder),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4.r,
-                    offset: Offset(0, 2.h),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 14.r,
-                    height: 14.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.w,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        NexoraColors.primaryPurple,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 10.w),
-                  Text(
-                    "Uploading voice message...",
-                    style: TextStyle(
-                      color: NexoraColors.textPrimary.withOpacity(0.8),
-                      fontSize: 13.sp,
-                    ),
-                  ),
-                ],
-              ),
+          Text(
+            message.replyToSenderId == _chatRepo.currentUserId
+                ? 'You'
+                : widget.name,
+            style: TextStyle(
+              color: isSender ? Colors.white : NexoraColors.primaryPurple,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.bold,
             ),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            message.replyToContent ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: (isSender ? Colors.white : NexoraColors.textPrimary)
+                  .withOpacity(0.8),
+              fontSize: 12.sp,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingToMessage == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: NexoraColors.midnightDark.withOpacity(0.9),
+        border: Border(
+          top: BorderSide(color: NexoraColors.glassBorder.withOpacity(0.3)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.reply_rounded,
+            color: NexoraColors.primaryPurple,
+            size: 20.r,
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _replyingToMessage!.senderId == _chatRepo.currentUserId
+                      ? 'Replying to yourself'
+                      : 'Replying to ${widget.name}',
+                  style: TextStyle(
+                    color: NexoraColors.primaryPurple,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  _replyingToMessage!.content,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: NexoraColors.textMuted,
+                    fontSize: 12.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.close_rounded,
+              color: NexoraColors.textMuted,
+              size: 20.r,
+            ),
+            onPressed: () => setState(() => _replyingToMessage = null),
           ),
         ],
       ),
@@ -1727,21 +1814,34 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           : CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(bottom: 4.h, right: 4.w),
-          child: Text(
-            "Voice Message",
-            style: TextStyle(
-              color: isSender
-                  ? Colors.white.withOpacity(0.6)
-                  : NexoraColors.primaryPurple.withOpacity(0.8),
-              fontSize: 10.sp,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
+          padding: EdgeInsets.only(bottom: 6.h, right: 4.w, left: 4.w),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.mic_none_rounded,
+                size: 10.r,
+                color: isSender
+                    ? Colors.white.withOpacity(0.6)
+                    : NexoraColors.accentCyan,
+              ),
+              SizedBox(width: 4.w),
+              Text(
+                "Voice Message",
+                style: TextStyle(
+                  color: isSender
+                      ? Colors.white.withOpacity(0.6)
+                      : NexoraColors.accentCyan,
+                  fontSize: 9.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
           ),
         ),
         Container(
-          constraints: BoxConstraints(minWidth: 220.w, maxWidth: 280.w),
+          constraints: BoxConstraints(minWidth: 180.w, maxWidth: 220.w),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1778,8 +1878,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   children: [
                     // Avatar background
                     Container(
-                      width: 48.r,
-                      height: 48.r,
+                      width: 36.r,
+                      height: 36.r,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: isSender
@@ -1809,7 +1909,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                                   'You',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.9),
-                                    fontSize: 11.sp,
+                                    fontSize: 9.sp,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -1822,7 +1922,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                                     widget.name[0].toUpperCase(),
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 16.sp,
+                                      fontSize: 12.sp,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1832,18 +1932,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     ),
                     // Play button overlay
                     Container(
-                      width: 26.r,
-                      height: 26.r,
+                      width: 28.r,
+                      height: 28.r,
                       decoration: BoxDecoration(
-                        color: isSender
-                            ? Colors.white.withOpacity(0.9)
-                            : NexoraColors.romanticPink,
+                        gradient: isPlaying
+                            ? NexoraGradients.romanticGlow
+                            : (isSender ? NexoraGradients.primaryButton : null),
+                        color: !isSender && !isPlaying
+                            ? NexoraColors.romanticPink
+                            : null,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 4.r,
-                            offset: Offset(0, 1.h),
+                            color:
+                                (isPlaying
+                                        ? NexoraColors.romanticPink
+                                        : Colors.black)
+                                    .withOpacity(0.3),
+                            blurRadius: 8.r,
+                            spreadRadius: 1.r,
                           ),
                         ],
                       ),
@@ -1851,16 +1958,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         isPlaying
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
-                        color: isSender
-                            ? NexoraColors.primaryPurple
-                            : Colors.white,
+                        color: Colors.white,
                         size: 18.r,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 12.w),
 
               // Waveform and duration
               Expanded(
@@ -1869,8 +1974,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   children: [
                     // Waveform visualization
                     Row(
-                      children: List.generate(24, (index) {
-                        // Create a more realistic waveform pattern
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(28, (index) {
                         final heights = [
                           8,
                           14,
@@ -1885,29 +1990,43 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           22,
                           12,
                           18,
+                          11,
                           8,
                           14,
                           20,
                           10,
                           16,
-                          8,
-                          12,
-                          18,
-                          10,
-                          14,
-                          8,
                         ];
-                        final height = heights[index].toDouble();
+                        final height = heights[index % heights.length]
+                            .toDouble();
 
                         return Container(
-                          width: 3.w,
-                          height: height,
-                          margin: EdgeInsets.symmetric(horizontal: 1.5.w),
+                          width: 2.w,
+                          height: height.h,
+                          margin: EdgeInsets.only(right: 1.2.w),
                           decoration: BoxDecoration(
-                            color: isSender
-                                ? Colors.white.withOpacity(0.8)
-                                : NexoraColors.romanticPink.withOpacity(0.7),
+                            color: isPlaying
+                                ? (isSender
+                                      ? Colors.white
+                                      : NexoraColors.accentCyan)
+                                : (isSender
+                                      ? Colors.white.withOpacity(0.3)
+                                      : NexoraColors.textMuted.withOpacity(
+                                          0.3,
+                                        )),
                             borderRadius: BorderRadius.circular(2.r),
+                            boxShadow: isPlaying
+                                ? [
+                                    BoxShadow(
+                                      color:
+                                          (isSender
+                                                  ? Colors.white
+                                                  : NexoraColors.accentCyan)
+                                              .withOpacity(0.3),
+                                      blurRadius: 4.r,
+                                    ),
+                                  ]
+                                : null,
                           ),
                         );
                       }),

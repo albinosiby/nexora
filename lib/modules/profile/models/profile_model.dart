@@ -163,6 +163,7 @@ class ProfileModel {
       spotifyTrackName: userData.spotifyTrackName,
       spotifyArtist: userData.spotifyArtist,
       lookingFor: userData.lookingFor,
+      age: userData.age,
       chats: userData.chats ?? const [],
       avatarSeed: avatarSeed,
       avatarStyle: avatarStyle,

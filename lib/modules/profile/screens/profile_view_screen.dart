@@ -7,6 +7,7 @@ import '../../../core/widgets/dark_background.dart';
 import '../../connections/repositories/connection_service.dart';
 import '../../chat/screens/chat_detail_screen.dart';
 import '../models/profile_model.dart';
+import '../repositories/user_repository.dart';
 
 /// Profile View Screen - View another user's profile with message option
 class ProfileViewScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
   late Animation<Offset> _slideAnimation;
   bool _isLiked = false;
   final ConnectionService _connectionService = Get.find<ConnectionService>();
+  final UserRepository _userRepo = UserRepository.instance;
 
   // Interest emojis map
   final Map<String, String> interestEmojis = {
@@ -467,191 +469,211 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
   }
 
   Widget _buildProfileHeader() {
-    return Column(
-      children: [
-        // Avatar with online indicator
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            // Glow effect
-            Container(
-              width: 145.r,
-              height: 145.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: NexoraColors.primaryPurple.withOpacity(0.4),
-                    blurRadius: 35.r,
-                    spreadRadius: 8.r,
-                  ),
-                ],
-              ),
-            ),
-            // Avatar
-            Container(
-              width: 130.r,
-              height: 130.r,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.3),
-                    NexoraColors.romanticPink.withOpacity(0.2),
+    return StreamBuilder<ProfileModel?>(
+      stream: _userRepo.getUserStream(widget.profile.id),
+      initialData: widget.profile,
+      builder: (context, snapshot) {
+        final profile = snapshot.data ?? widget.profile;
+
+        return StreamBuilder<bool>(
+          stream: _userRepo.getUserPresenceStream(widget.profile.id),
+          initialData: profile.isOnline,
+          builder: (context, presenceSnapshot) {
+            final isOnline = presenceSnapshot.data ?? false;
+
+            return Column(
+              children: [
+                // Avatar with online indicator
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Glow effect
+                    Container(
+                      width: 145.r,
+                      height: 145.r,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: NexoraColors.primaryPurple.withOpacity(0.4),
+                            blurRadius: 35.r,
+                            spreadRadius: 8.r,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Avatar
+                    Container(
+                      width: 130.r,
+                      height: 130.r,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            NexoraColors.primaryPurple.withOpacity(0.3),
+                            NexoraColors.romanticPink.withOpacity(0.2),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: NexoraColors.primaryPurple.withOpacity(0.6),
+                          width: 3.w,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: profile.avatar.startsWith('http')
+                            ? Image.network(
+                                profile.avatar,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Center(
+                                      child: Text(
+                                        profile.name.isNotEmpty
+                                            ? profile.name[0].toUpperCase()
+                                            : '?',
+                                        style: TextStyle(
+                                          fontSize: 50.sp,
+                                          color: NexoraColors.textPrimary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                              )
+                            : Center(
+                                child: Text(
+                                  profile.name.isNotEmpty
+                                      ? profile.name[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                    fontSize: 50.sp,
+                                    color: NexoraColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    // Online indicator
+                    if (isOnline)
+                      Positioned(
+                        bottom: 8.h,
+                        right: 8.w,
+                        child: Container(
+                          width: 24.r,
+                          height: 24.r,
+                          decoration: BoxDecoration(
+                            color: NexoraColors.online,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: NexoraColors.midnightDark,
+                              width: 3.w,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: NexoraColors.online.withOpacity(0.5),
+                                blurRadius: 8.r,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: NexoraColors.primaryPurple.withOpacity(0.6),
-                  width: 3.w,
-                ),
-              ),
-              child: ClipOval(
-                child: widget.profile.avatar.startsWith('http')
-                    ? Image.network(
-                        widget.profile.avatar,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Center(
-                          child: Text(
-                            widget.profile.name.isNotEmpty
-                                ? widget.profile.name[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              fontSize: 50.sp,
-                              color: NexoraColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          widget.profile.name.isNotEmpty
-                              ? widget.profile.name[0].toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            fontSize: 50.sp,
-                            color: NexoraColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+
+                SizedBox(height: 20.h),
+
+                // Name
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      profile.displayName,
+                      style: TextStyle(
+                        fontSize: 28.sp,
+                        fontWeight: FontWeight.bold,
+                        color: NexoraColors.textPrimary,
                       ),
-              ),
-            ),
-            // Online indicator
-            if (widget.profile.isOnline)
-              Positioned(
-                bottom: 8.h,
-                right: 8.w,
-                child: Container(
-                  width: 24.r,
-                  height: 24.r,
-                  decoration: BoxDecoration(
-                    color: NexoraColors.online,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: NexoraColors.midnightDark,
-                      width: 3.w,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: NexoraColors.online.withOpacity(0.5),
-                        blurRadius: 8.r,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: EdgeInsets.all(4.r),
+                      decoration: BoxDecoration(
+                        gradient: NexoraGradients.cyanAccent,
+                        shape: BoxShape.circle,
                       ),
-                    ],
-                  ),
+                      child: Icon(Icons.check, color: Colors.white, size: 12.r),
+                    ),
+                  ],
                 ),
-              ),
-          ],
-        ),
 
-        SizedBox(height: 20.h),
+                const SizedBox(height: 8),
 
-        // Name
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              widget.profile.displayName,
-              style: TextStyle(
-                fontSize: 28.sp,
-                fontWeight: FontWeight.bold,
-                color: NexoraColors.textPrimary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: EdgeInsets.all(4.r),
-              decoration: BoxDecoration(
-                gradient: NexoraGradients.cyanAccent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.check, color: Colors.white, size: 12.r),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 8),
-
-        // Year & Major
-        if (widget.profile.year.isNotEmpty || widget.profile.major.isNotEmpty)
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  NexoraColors.primaryPurple.withOpacity(0.2),
-                  NexoraColors.romanticPink.withOpacity(0.1),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20.r),
-              border: Border.all(
-                color: NexoraColors.primaryPurple.withOpacity(0.3),
-                width: 1.w,
-              ),
-            ),
-            child: Text(
-              [
-                widget.profile.year,
-                widget.profile.major,
-              ].where((s) => s.isNotEmpty).join(' • '),
-              style: TextStyle(
-                color: NexoraColors.textPrimary,
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-
-        // Online status
-        if (widget.profile.isOnline)
-          Padding(
-            padding: EdgeInsets.only(top: 8.h),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 8.r,
-                  height: 8.r,
-                  decoration: BoxDecoration(
-                    color: NexoraColors.online,
-                    shape: BoxShape.circle,
+                // Year & Major
+                if (profile.year.isNotEmpty || profile.major.isNotEmpty)
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.w,
+                      vertical: 8.h,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          NexoraColors.primaryPurple.withOpacity(0.2),
+                          NexoraColors.romanticPink.withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20.r),
+                      border: Border.all(
+                        color: NexoraColors.primaryPurple.withOpacity(0.3),
+                        width: 1.w,
+                      ),
+                    ),
+                    child: Text(
+                      [
+                        profile.year,
+                        profile.major,
+                      ].where((s) => s.isNotEmpty).join(' • '),
+                      style: TextStyle(
+                        color: NexoraColors.textPrimary,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
-                SizedBox(width: 6.w),
-                Text(
-                  'Online now',
-                  style: TextStyle(
-                    color: NexoraColors.online,
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w500,
+
+                // Online status
+                if (isOnline)
+                  Padding(
+                    padding: EdgeInsets.only(top: 8.h),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 8.r,
+                          height: 8.r,
+                          decoration: BoxDecoration(
+                            color: NexoraColors.online,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        SizedBox(width: 6.w),
+                        Text(
+                          'Online now',
+                          style: TextStyle(
+                            color: NexoraColors.online,
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
               ],
-            ),
-          ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 

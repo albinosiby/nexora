@@ -178,7 +178,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   }
 
   void _showPostOptions(PostModel post, int index) {
-    final isOwnPost = post.userId == _userId || post.user == _userName;
+    final isOwnPost = post.userId == _userId || post.displayName == _userName;
 
     Get.bottomSheet(
       Container(
@@ -233,13 +233,13 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               if (!isOwnPost) ...[
                 _buildOptionTile(
                   icon: Icons.person_add_outlined,
-                  label: 'Follow ${post.user}',
+                  label: 'Follow ${post.displayName}',
                   color: NexoraColors.primaryPurple,
                   onTap: () {
                     Get.back();
                     Get.snackbar(
                       'Following',
-                      'You are now following ${post.user}',
+                      'You are now following ${post.displayName}',
                       backgroundColor: NexoraColors.success.withOpacity(0.9),
                       colorText: Colors.white,
                       snackPosition: SnackPosition.TOP,
@@ -256,7 +256,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                     Get.back();
                     Get.snackbar(
                       'Muted',
-                      'You won\'t see posts from ${post.user}',
+                      'You won\'t see posts from ${post.displayName}',
                       backgroundColor: NexoraColors.warning.withOpacity(0.9),
                       colorText: Colors.white,
                       snackPosition: SnackPosition.TOP,
@@ -606,8 +606,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       () => ProfileViewScreen(
         profile: ProfileModel(
           id: post.id,
-          name: post.user,
-          email: '${post.user.toLowerCase().replaceAll(' ', '.')}@example.com',
+          name: post.displayName,
+          email:
+              '${post.displayName.toLowerCase().replaceAll(' ', '.').replaceAll('@', '')}@example.com',
           avatar: post.avatar,
           bio: 'Campus community member 💜',
           year: '3rd Year',
@@ -3047,7 +3048,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     GestureDetector(
                       onTap: () {
                         _focusNode.requestFocus();
-                        _commentController.text = '@${comment.user} ';
+                        _commentController.text = '${comment.displayName} ';
                         _commentController
                             .selection = TextSelection.fromPosition(
                           TextPosition(offset: _commentController.text.length),
