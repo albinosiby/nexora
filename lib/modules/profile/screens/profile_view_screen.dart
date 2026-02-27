@@ -1351,31 +1351,33 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
           bgColor = NexoraColors.accentCyan;
           borderColor = NexoraColors.accentCyan;
           contentColor = NexoraColors.accentCyan;
-          onTap = () {
-            _connectionService.sendRequest(
+          onTap = () async {
+            final success = await _connectionService.sendRequest(
               userId: widget.profile.id,
               name: widget.profile.displayName,
               avatar: widget.profile.avatar,
               major: widget.profile.major,
               year: widget.profile.year,
             );
-            Get.snackbar(
-              'Connection Request Sent',
-              'You sent a connection request to ${widget.profile.displayName}',
-              backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
-              colorText: Colors.white,
-              snackPosition: SnackPosition.TOP,
-              duration: const Duration(seconds: 2),
-              margin: EdgeInsets.all(16.w),
-              borderRadius: 12.r,
-              icon: Padding(
-                padding: EdgeInsets.only(left: 12.w),
-                child: const Icon(
-                  Icons.person_add_rounded,
-                  color: Colors.white,
+            if (success) {
+              Get.snackbar(
+                'Connection Request Sent',
+                'You sent a connection request to ${widget.profile.displayName}',
+                backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
+                colorText: Colors.white,
+                snackPosition: SnackPosition.TOP,
+                duration: const Duration(seconds: 2),
+                margin: EdgeInsets.all(16.w),
+                borderRadius: 12.r,
+                icon: Padding(
+                  padding: EdgeInsets.only(left: 12.w),
+                  child: const Icon(
+                    Icons.person_add_rounded,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            );
+              );
+            }
           };
       }
 

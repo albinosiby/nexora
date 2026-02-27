@@ -36,8 +36,14 @@ class AuthRepository extends GetxService {
     ever<fb.User?>(_firebaseUser, (fb.User? user) async {
       if (user != null) {
         _isProfileLoading.value = true;
-        _currentUserProfile.value = await getUserProfile(user.uid);
+        final profile = await getUserProfile(user.uid);
+        _currentUserProfile.value = profile;
         _isProfileLoading.value = false;
+
+        // Sync with RTDB and set up presence handlers
+        if (profile != null) {
+          await syncUserWithRTDB(profile);
+        }
       } else {
         _currentUserProfile.value = null;
         _isProfileLoading.value = false;
@@ -137,5 +143,21 @@ class AuthRepository extends GetxService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('showOnboarding', false);
     _showOnboarding.value = false;
+  }
+
+  /// Save FCM token to Firestore
+  Future<void> saveFcmToken(String token) async {
+    if (user != null) {
+      await _firestore.collection('users').doc(user!.uid).update({
+        'fcmToken': token,
+      });
+      // Also update local profile if it exists
+      if (_currentUserProfile.value != null) {
+        _currentUserProfile.value = _currentUserProfile.value!.copyWith(
+          // Assuming fcmToken exists in UserModel or we can just ignore local sync for now
+          // If UserModel has it, we should add it there too.
+        );
+      }
+    }
   }
 }

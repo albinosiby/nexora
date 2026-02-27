@@ -12,8 +12,10 @@ import 'modules/profile/repositories/user_repository.dart';
 import 'modules/chat/repositories/chat_repository.dart';
 import 'modules/discover/repositories/match_repository.dart';
 import 'modules/discover/controllers/match_controller.dart';
+import 'modules/notifications/controllers/notification_controller.dart';
 import 'core/services/spotify_service.dart';
 import 'core/services/storage_service.dart';
+import 'core/services/push_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +33,11 @@ void main() async {
   Get.put(SpotifyService());
   Get.put(StorageService());
   Get.put(ConnectionService());
+  Get.put(NotificationController());
+
+  // Push Notifications
+  final pushService = Get.put(PushNotificationService());
+  await pushService.init();
 
   runApp(const CampusApp());
 }

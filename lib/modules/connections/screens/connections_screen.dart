@@ -526,9 +526,13 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
                 // Message
                 GestureDetector(
                   onTap: () async {
-                    final chatId = await _chatRepo.createChat(
+                    // Always check for existing chat first
+                    String? chatId = await _chatRepo.findExistingChat(
                       connection.userId,
                     );
+                    if (chatId == null) {
+                      chatId = await _chatRepo.createChat(connection.userId);
+                    }
                     Get.to(
                       () => ChatDetailScreen(
                         name: connection.name,

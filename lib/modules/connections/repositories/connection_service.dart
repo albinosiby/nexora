@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/theme/nexora_theme.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../notifications/models/notification_model.dart';
+import '../../notifications/repositories/notification_repository.dart';
 
 enum ConnectionStatus {
   none,
@@ -38,6 +42,7 @@ class ConnectionService extends GetxController {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthRepository _auth = AuthRepository.instance;
+  final NotificationRepository _notificationRepo = NotificationRepository();
 
   // Map of userId -> ConnectionStatus
   final RxMap<String, ConnectionStatus> _connectionStatuses =
@@ -162,7 +167,7 @@ class ConnectionService extends GetxController {
   }
 
   // Send connection request
-  void sendRequest({
+  Future<bool> sendRequest({
     required String userId,
     required String name,
     required String avatar,
@@ -171,7 +176,19 @@ class ConnectionService extends GetxController {
   }) async {
     final currentUserId = _auth.user?.uid;
     final currentUser = _auth.currentUserProfile;
-    if (currentUserId == null || currentUser == null) return;
+
+    if (currentUserId == null) return false;
+
+    if (currentUser == null) {
+      Get.snackbar(
+        'Profile Loading',
+        'Please wait for your profile to load before connecting',
+        backgroundColor: NexoraColors.warning.withOpacity(0.9),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
+      return false;
+    }
 
     if (_connectionStatuses[userId] == ConnectionStatus.none ||
         _connectionStatuses[userId] == null) {
@@ -193,13 +210,39 @@ class ConnectionService extends GetxController {
         'status': 'pending',
       };
 
-      await _firestore
-          .collection('connection_requests')
-          .doc(requestId)
-          .set(requestData);
+      try {
+        await _firestore
+            .collection('connection_requests')
+            .doc(requestId)
+            .set(requestData);
 
-      _connectionStatuses[userId] = ConnectionStatus.pending;
+        _connectionStatuses[userId] = ConnectionStatus.pending;
+
+        // Send notification to recipient
+        final notification = NotificationModel(
+          id: '', // Firestore will generate an ID if needed, or repo handles it
+          type: NotificationType.connectionRequest,
+          userId: currentUserId,
+          userName: currentUser.displayName,
+          userAvatar: currentUser.avatar,
+          message: 'sent you a connection request',
+          timestamp: DateTime.now(),
+        );
+
+        await _notificationRepo.addNotification(notification, userId);
+        return true;
+      } catch (e) {
+        Get.snackbar(
+          'Error',
+          'Failed to send connection request. Please try again.',
+          backgroundColor: NexoraColors.error.withOpacity(0.9),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
+        return false;
+      }
     }
+    return false;
   }
 
   void _updateConnectionsList(
@@ -255,6 +298,7 @@ class ConnectionService extends GetxController {
   // Accept incoming request
   void acceptRequest(String userId) async {
     final currentUserId = _auth.user?.uid;
+    final currentUser = _auth.currentUserProfile;
     if (currentUserId == null) return;
 
     final requestId = '${userId}_$currentUserId';
@@ -262,6 +306,25 @@ class ConnectionService extends GetxController {
       'status': 'accepted',
       'timestamp': FieldValue.serverTimestamp(),
     });
+
+    // Notify requester
+    if (currentUser != null) {
+      try {
+        final notification = NotificationModel(
+          id: '',
+          type: NotificationType.match,
+          userId: currentUserId,
+          userName: currentUser.displayName,
+          userAvatar: currentUser.avatar,
+          message: 'accepted your connection request',
+          timestamp: DateTime.now(),
+        );
+
+        await _notificationRepo.addNotification(notification, userId);
+      } catch (e) {
+        debugPrint('Error sending acceptance notification: $e');
+      }
+    }
   }
 
   // Reject/decline incoming request

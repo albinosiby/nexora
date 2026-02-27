@@ -723,15 +723,17 @@ class _MatchScreenState extends State<MatchScreen>
           icon = Icons.person_add_rounded;
           label = 'Connect';
           gradient = NexoraGradients.primaryButton;
-          onTap = () {
-            _connectionService.sendRequest(
+          onTap = () async {
+            final success = await _connectionService.sendRequest(
               userId: userId,
               name: user.displayName,
               avatar: user.avatar,
               major: user.major,
               year: user.year,
             );
-            _showConnectSnackbar(user.displayName);
+            if (success) {
+              _showConnectSnackbar(user.displayName);
+            }
           };
       }
 

@@ -28,12 +28,16 @@ class ChatRepository extends GetxService {
         final chatId = entry.key;
         final chatDoc = await _db.ref('chats/$chatId').get();
         if (chatDoc.exists) {
-          conversations.add(
-            ChatModel.fromJson(
-              Map<String, dynamic>.from(chatDoc.value as Map),
-              chatId,
-            ),
-          );
+          final chatData = Map<String, dynamic>.from(chatDoc.value as Map);
+
+          // Merge unreadCount from user_chats entry
+          final userChatData = Map<String, dynamic>.from(entry.value as Map);
+          final unreadCount = userChatData['unreadCount'] ?? 0;
+
+          // ChatModel expects unreadCounts map
+          chatData['unreadCounts'] = {currentUserId!: unreadCount};
+
+          conversations.add(ChatModel.fromJson(chatData, chatId));
         }
       }
       conversations.sort(
