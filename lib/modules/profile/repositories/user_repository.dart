@@ -38,7 +38,7 @@ class UserRepository extends GetxService {
       major: user.major ?? '',
       interests: user.interests,
       isOnline: user.isOnline,
-      connections: user.followers,
+      connections: user.connections,
       posts: user.posts,
       instagram: user.instagram,
       spotify: user.spotify,

@@ -10,13 +10,13 @@ class NotificationRepository {
 
   String? get _uid => _auth.user?.uid;
 
-  /// Get notifications stream
   Stream<List<NotificationModel>> getNotificationsStream() {
     if (_uid == null) return Stream.value([]);
 
     return _firestore
+        .collection('users')
+        .doc(_uid)
         .collection('notifications')
-        .where('recipientId', isEqualTo: _uid)
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -29,11 +29,14 @@ class NotificationRepository {
         });
   }
 
-  /// Mark notification as read
   Future<void> markAsRead(String notificationId) async {
-    await _firestore.collection('notifications').doc(notificationId).update({
-      'isRead': true,
-    });
+    if (_uid == null) return;
+    await _firestore
+        .collection('users')
+        .doc(_uid)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'isRead': true});
   }
 
   /// Mark all notifications as read
@@ -42,8 +45,9 @@ class NotificationRepository {
 
     final batch = _firestore.batch();
     final snapshots = await _firestore
+        .collection('users')
+        .doc(_uid)
         .collection('notifications')
-        .where('recipientId', isEqualTo: _uid)
         .where('isRead', isEqualTo: false)
         .get();
 
@@ -54,14 +58,14 @@ class NotificationRepository {
     await batch.commit();
   }
 
-  /// Add new notification (usually done by backend, but here for local triggers if needed)
   Future<void> addNotification(
     NotificationModel notification,
     String recipientId,
   ) async {
-    await _firestore.collection('notifications').add({
-      ...notification.toFirestore(),
-      'recipientId': recipientId,
-    });
+    await _firestore
+        .collection('users')
+        .doc(recipientId)
+        .collection('notifications')
+        .add({...notification.toFirestore(), 'recipientId': recipientId});
   }
 }

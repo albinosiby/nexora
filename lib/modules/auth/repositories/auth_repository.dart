@@ -1,4 +1,4 @@
-// lib/modules/auth/repositories/auth_repository.dart
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,12 +16,16 @@ class AuthRepository extends GetxService {
 
   final Rx<fb.User?> _firebaseUser = Rx<fb.User?>(null);
   fb.User? get user => _firebaseUser.value;
+  Rx<fb.User?> get userRx => _firebaseUser;
 
   final Rx<UserModel?> _currentUserProfile = Rx<UserModel?>(null);
   UserModel? get currentUserProfile => _currentUserProfile.value;
 
   final RxBool _isProfileLoading = false.obs;
   bool get isProfileLoading => _isProfileLoading.value;
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _profileSubscription;
 
   final RxBool _showOnboarding = true.obs;
   bool get showOnboarding => _showOnboarding.value;
@@ -32,18 +36,24 @@ class AuthRepository extends GetxService {
     _checkOnboardingStatus();
     _firebaseUser.bindStream(_auth.authStateChanges());
 
-    // Periodically sync profile
-    ever<fb.User?>(_firebaseUser, (fb.User? user) async {
+    // Listen to Firebase User changes
+    _firebaseUser.listen((fb.User? user) {
+      _profileSubscription?.cancel();
+
       if (user != null) {
         _isProfileLoading.value = true;
-        final profile = await getUserProfile(user.uid);
-        _currentUserProfile.value = profile;
-        _isProfileLoading.value = false;
-
-        // Sync with RTDB and set up presence handlers
-        if (profile != null) {
-          await syncUserWithRTDB(profile);
-        }
+        _profileSubscription = _firestore
+            .collection('users')
+            .doc(user.uid)
+            .snapshots()
+            .listen((snapshot) {
+              if (snapshot.exists) {
+                final profile = UserModel.fromJson(snapshot.data()!);
+                _currentUserProfile.value = profile;
+                syncUserWithRTDB(profile);
+              }
+              _isProfileLoading.value = false;
+            });
       } else {
         _currentUserProfile.value = null;
         _isProfileLoading.value = false;
@@ -159,5 +169,11 @@ class AuthRepository extends GetxService {
         );
       }
     }
+  }
+
+  @override
+  void onClose() {
+    _profileSubscription?.cancel();
+    super.onClose();
   }
 }

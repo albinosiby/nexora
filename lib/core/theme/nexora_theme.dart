@@ -417,12 +417,10 @@ class NexoraTheme {
       primary: NexoraColors.primaryPurple,
       secondary: NexoraColors.romanticPink,
       tertiary: NexoraColors.accentCyan,
-      background: NexoraColors.midnightDark,
       surface: NexoraColors.midnightPurple,
       error: NexoraColors.error,
       onPrimary: NexoraColors.textPrimary,
       onSecondary: NexoraColors.textPrimary,
-      onBackground: NexoraColors.textPrimary,
       onSurface: NexoraColors.textPrimary,
     ),
 
@@ -466,13 +464,13 @@ class NexoraTheme {
             ),
             shadowColor: Colors.transparent,
           ).copyWith(
-            backgroundColor: MaterialStateProperty.resolveWith((states) {
-              if (states.contains(MaterialState.disabled)) {
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.disabled)) {
                 return NexoraColors.textMuted;
               }
               return Colors.transparent;
             }),
-            elevation: MaterialStateProperty.all(0),
+            elevation: WidgetStateProperty.all(0),
           ),
     ),
 
@@ -579,6 +577,28 @@ class NexoraTheme {
       },
     ),
   );
+
+  static InputDecoration glassInputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: NexoraColors.textMuted),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.05),
+      contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        borderSide: const BorderSide(color: NexoraColors.primaryPurple),
+      ),
+    );
+  }
 }
 
 /// =====================================================

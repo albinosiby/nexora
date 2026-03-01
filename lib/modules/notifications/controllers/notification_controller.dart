@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
+import '../../auth/repositories/auth_repository.dart';
 import '../models/notification_model.dart';
 import '../repositories/notification_repository.dart';
 
@@ -10,17 +12,44 @@ class NotificationController extends GetxController {
 
   final RxList<NotificationModel> notifications = <NotificationModel>[].obs;
   final RxBool isLoading = true.obs;
+  StreamSubscription? _notificationSub;
+  StreamSubscription? _authSub;
 
   @override
   void onInit() {
     super.onInit();
-    _bindNotifications();
+    _authSub = AuthRepository.instance.userRx.listen((user) {
+      if (user != null) {
+        _bindNotifications();
+      } else {
+        _cleanup();
+      }
+    });
+
+    if (AuthRepository.instance.user != null) {
+      _bindNotifications();
+    }
+  }
+
+  @override
+  void onClose() {
+    _authSub?.cancel();
+    _cleanup();
+    super.onClose();
+  }
+
+  void _cleanup() {
+    _notificationSub?.cancel();
+    _notificationSub = null;
+    notifications.clear();
+    isLoading.value = false;
   }
 
   void _bindNotifications() {
+    _cleanup();
     bool isInitialLoad = true;
 
-    _repository.getNotificationsStream().listen((list) {
+    _notificationSub = _repository.getNotificationsStream().listen((list) {
       if (isInitialLoad) {
         notifications.assignAll(list);
         isInitialLoad = false;

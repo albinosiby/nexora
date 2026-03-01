@@ -12,6 +12,14 @@ import '../../auth/repositories/auth_repository.dart';
 import '../../auth/models/user_model.dart';
 import '../repositories/feed_repo.dart';
 import '../model/feed_model.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+import '../../chat/repositories/chat_repository.dart';
+import '../../chat/models/chat_model.dart';
+import '../../chat/models/message_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 
 class BroadcastScreen extends StatefulWidget {
   const BroadcastScreen({super.key});
@@ -60,16 +68,24 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _loadPosts();
+    _subscribeToPosts();
+  }
+
+  void _subscribeToPosts() {
+    setState(() => _isLoading = true);
+    PostRepository.instance.getPostsStream().listen((posts) {
+      if (mounted) {
+        setState(() {
+          _allPosts = posts;
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   Future<void> _loadPosts() async {
-    setState(() => _isLoading = true);
-    final posts = await PostRepository.instance.getPosts();
-    setState(() {
-      _allPosts = posts;
-      _isLoading = false;
-    });
+    // Kept for compatibility if called elsewhere, but we use streams now
+    _subscribeToPosts();
   }
 
   @override
@@ -90,10 +106,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         userName: _userName,
         userAvatar: _userAvatar,
         onPostCreated: (newPost) async {
-          final createdPost = await PostRepository.instance.createPost(newPost);
-          setState(() {
-            _allPosts.insert(0, createdPost);
-          });
+          await PostRepository.instance.createPost(newPost);
         },
       ),
     );
@@ -102,79 +115,17 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   void _toggleLike(int index) async {
     HapticFeedback.lightImpact();
     final post = filteredPosts[index];
-    final actualIndex = _allPosts.indexWhere((p) => p.id == post.id);
-    if (actualIndex == -1) return;
 
-    // Optimistic update
-    setState(() {
-      final wasLiked = post.liked;
-      _allPosts[actualIndex] = post.copyWith(
-        liked: !wasLiked,
-        likes: wasLiked ? post.likes - 1 : post.likes + 1,
-      );
-    });
-
-    try {
-      final updatedPost = await PostRepository.instance.toggleLike(
-        post.id,
-        _userId,
-      );
-      setState(() {
-        _allPosts[actualIndex] = updatedPost;
-      });
-    } catch (e) {
-      // Revert on error
-      setState(() {
-        _allPosts[actualIndex] = post;
-      });
-      Get.snackbar('Error', 'Failed to update like');
-    }
+    // We don't need optimistic update here necessarily if stream is fast,
+    // but we can keep it for UX.
+    await PostRepository.instance.toggleLike(post.id, _userId);
   }
 
   void _toggleSave(int index) async {
     HapticFeedback.lightImpact();
     final post = filteredPosts[index];
-    final actualIndex = _allPosts.indexWhere((p) => p.id == post.id);
-    if (actualIndex == -1) return;
 
-    // Optimistic update
-    setState(() {
-      _allPosts[actualIndex] = post.copyWith(saved: !post.saved);
-    });
-
-    try {
-      final updatedPost = await PostRepository.instance.toggleSave(
-        post.id,
-        _userId,
-      );
-      setState(() {
-        _allPosts[actualIndex] = updatedPost;
-      });
-
-      final isSaved = updatedPost.saved;
-      Get.snackbar(
-        isSaved ? 'Saved to collection' : 'Removed from collection',
-        isSaved ? 'Post saved successfully' : 'Post removed successfully',
-        backgroundColor:
-            (isSaved ? NexoraColors.accentCyan : NexoraColors.textMuted)
-                .withOpacity(0.95),
-        colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 1),
-        margin: EdgeInsets.all(16.r),
-        borderRadius: 12.r,
-        icon: Icon(
-          isSaved ? Icons.bookmark : Icons.bookmark_border,
-          color: Colors.white,
-        ),
-      );
-    } catch (e) {
-      // Revert on error
-      setState(() {
-        _allPosts[actualIndex] = post;
-      });
-      Get.snackbar('Error', 'Failed to save post');
-    }
+    await PostRepository.instance.toggleSave(post.id, _userId);
   }
 
   void _showPostOptions(PostModel post, int index) {
@@ -340,19 +291,12 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         initialContent: post.content,
         isEditing: true,
         onPostCreated: (editedPost) async {
-          final actualIndex = _allPosts.indexWhere((p) => p.id == post.id);
-          if (actualIndex == -1) return;
-
-          final updatedPost = await PostRepository.instance.updatePost(
+          await PostRepository.instance.updatePost(
             post.copyWith(
               content: editedPost.content,
               hashtags: editedPost.hashtags,
             ),
           );
-
-          setState(() {
-            _allPosts[actualIndex] = updatedPost;
-          });
         },
       ),
     );
@@ -600,34 +544,46 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  void _openUserProfile(PostModel post) {
+  void _openUserProfile(PostModel post) async {
     HapticFeedback.lightImpact();
-    Get.to(
-      () => ProfileViewScreen(
-        profile: ProfileModel(
-          id: post.id,
-          name: post.displayName,
-          email:
-              '${post.displayName.toLowerCase().replaceAll(' ', '.').replaceAll('@', '')}@example.com',
-          avatar: post.avatar,
-          bio: 'Campus community member 💜',
-          year: '3rd Year',
-          major: 'Computer Science',
-          interests: const ['Coding', 'Music', 'Gaming'],
-          isOnline: true,
-          spotifyTrackName: 'Espresso',
-          spotifyArtist: 'Sabrina Carpenter',
-        ),
-      ),
-      transition: Transition.rightToLeftWithFade,
-      duration: const Duration(milliseconds: 400),
+
+    // Show loading or just navigate if we assume fast fetch
+    final userProfile = await AuthRepository.instance.getUserProfile(
+      post.userId,
     );
+
+    if (userProfile != null) {
+      Get.to(
+        () =>
+            ProfileViewScreen(profile: ProfileModel.fromUserData(userProfile)),
+        transition: Transition.rightToLeftWithFade,
+        duration: const Duration(milliseconds: 400),
+      );
+    } else {
+      // Fallback to minimal profile if user not found in DB (unlikely)
+      Get.to(
+        () => ProfileViewScreen(
+          profile: ProfileModel(
+            id: post.userId,
+            name: post.user,
+            email: '',
+            avatar: post.avatar,
+          ),
+        ),
+        transition: Transition.rightToLeftWithFade,
+        duration: const Duration(milliseconds: 400),
+      );
+    }
   }
 
-  void _openImageViewer(List<String> images, int initialIndex) {
+  void _openImageViewer(List<String> images, int initialIndex, PostModel post) {
     HapticFeedback.lightImpact();
     Get.to(
-      () => ImageViewerScreen(images: images, initialIndex: initialIndex),
+      () => ImageViewerScreen(
+        images: images,
+        initialIndex: initialIndex,
+        post: post,
+      ),
       transition: Transition.zoom,
       duration: const Duration(milliseconds: 300),
     );
@@ -992,6 +948,21 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
+  String _getTimeAgo(DateTime dateTime) {
+    final duration = DateTime.now().difference(dateTime);
+    if (duration.inDays > 7) {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    } else if (duration.inDays >= 1) {
+      return '${duration.inDays}d ago';
+    } else if (duration.inHours >= 1) {
+      return '${duration.inHours}h ago';
+    } else if (duration.inMinutes >= 1) {
+      return '${duration.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
   Widget _buildPostCard(PostModel post, int index) {
     return GestureDetector(
       onDoubleTap: () => _toggleLike(index),
@@ -1001,132 +972,183 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Enhanced Header
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: () => _openUserProfile(post),
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 50.w,
-                        height: 50.w,
-                        decoration: BoxDecoration(
-                          gradient: NexoraGradients.primaryButton,
-                          borderRadius: BorderRadius.circular(15.r),
-                          boxShadow: [
-                            BoxShadow(
-                              color: NexoraColors.primaryPurple.withOpacity(
-                                0.3,
-                              ),
-                              blurRadius: 8.r,
-                              spreadRadius: 1.r,
+            // Enhanced Header with Dynamic Profile Loading
+            FutureBuilder<UserModel?>(
+              future: AuthRepository.instance.getUserProfile(post.userId),
+              builder: (context, snapshot) {
+                final author = snapshot.data;
+                final displayName = author?.displayName ?? post.displayName;
+                final avatar = author?.avatar ?? post.avatar;
+
+                return Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _openUserProfile(post),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 50.w,
+                            height: 50.w,
+                            decoration: BoxDecoration(
+                              gradient: NexoraGradients.primaryButton,
+                              borderRadius: BorderRadius.circular(15.r),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: NexoraColors.primaryPurple.withOpacity(
+                                    0.3,
+                                  ),
+                                  blurRadius: 8.r,
+                                  spreadRadius: 1.r,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Center(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(15.r),
-                            child: post.avatar.isNotEmpty
-                                ? Image.network(
-                                    post.avatar,
-                                    width: 50.w,
-                                    height: 50.w,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) => Text(
-                                          post.displayName[0].toUpperCase(),
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.sp,
-                                          ),
+                            child: Center(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(15.r),
+                                child: avatar.isNotEmpty
+                                    ? Image.network(
+                                        avatar,
+                                        width: 50.w,
+                                        height: 50.w,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Text(
+                                                  displayName[0].toUpperCase(),
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 20.sp,
+                                                  ),
+                                                ),
+                                      )
+                                    : Text(
+                                        displayName[0].toUpperCase(),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 20.sp,
                                         ),
-                                  )
-                                : Text(
-                                    post.displayName[0].toUpperCase(),
+                                      ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 2.h,
+                            right: 2.w,
+                            child: Container(
+                              width: 12.w,
+                              height: 12.w,
+                              decoration: BoxDecoration(
+                                color: (author?.isOnline ?? false)
+                                    ? Colors.green
+                                    : Colors.grey,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: NexoraColors.midnightDark,
+                                  width: 2.w,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _openUserProfile(post),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    displayName,
                                     style: TextStyle(
-                                      color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 20.sp,
+                                      color: NexoraColors.textPrimary,
+                                      fontSize: 16.sp,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (post.feeling != null) ...[
+                                  SizedBox(width: 4.w),
+                                  Text(
+                                    "is feeling ${post.feeling}",
+                                    style: TextStyle(
+                                      color: NexoraColors.textSecondary,
+                                      fontSize: 12.sp,
+                                      fontStyle: FontStyle.italic,
                                     ),
                                   ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 2.h,
-                        right: 2.w,
-                        child: Container(
-                          width: 12.w,
-                          height: 12.w,
-                          decoration: BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: NexoraColors.midnightDark,
-                              width: 2.w,
+                                ],
+                              ],
                             ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _openUserProfile(post),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              post.displayName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: NexoraColors.textPrimary,
-                                fontSize: 16.sp,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 2.h),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              color: NexoraColors.textMuted,
-                              size: 12.r,
-                            ),
-                            SizedBox(width: 4.w),
-                            Text(
-                              post.time.toString(),
-                              style: TextStyle(
-                                color: NexoraColors.textMuted,
-                                fontSize: 12.sp,
-                              ),
+                            SizedBox(height: 2.h),
+                            Row(
+                              children: [
+                                Icon(
+                                  post.visibility == 'Public'
+                                      ? Icons.public
+                                      : post.visibility == 'Campus'
+                                      ? Icons.school
+                                      : Icons.lock,
+                                  color: NexoraColors.accentCyan,
+                                  size: 12.r,
+                                ),
+                                SizedBox(width: 4.w),
+                                Text(
+                                  post.visibility,
+                                  style: TextStyle(
+                                    color: NexoraColors.accentCyan,
+                                    fontSize: 11.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  '  •  ',
+                                  style: TextStyle(
+                                    color: NexoraColors.textMuted,
+                                    fontSize: 10.sp,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.access_time,
+                                  color: NexoraColors.textMuted,
+                                  size: 11.r,
+                                ),
+                                SizedBox(width: 4.w),
+                                Text(
+                                  _getTimeAgo(post.createdAt),
+                                  style: TextStyle(
+                                    color: NexoraColors.textMuted,
+                                    fontSize: 11.sp,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: NexoraColors.glassBackground,
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    color: NexoraColors.textMuted,
-                    iconSize: 20.r,
-                    onPressed: () => _showPostOptions(post, index),
-                  ),
-                ),
-              ],
+                    Container(
+                      decoration: BoxDecoration(
+                        color: NexoraColors.glassBackground,
+                        borderRadius: BorderRadius.circular(10.r),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.more_vert),
+                        color: NexoraColors.textMuted,
+                        iconSize: 20.r,
+                        onPressed: () => _showPostOptions(post, index),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
 
             SizedBox(height: 16.h),
@@ -1143,6 +1165,20 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 ),
               ),
             ),
+
+            SizedBox(height: 12.h),
+
+            // Poll Widget
+            if (post.poll != null) ...[
+              _buildPollWidget(post),
+              SizedBox(height: 12.h),
+            ],
+
+            // Image Grid
+            if (post.images.isNotEmpty) ...[
+              _buildImageGrid(post.images, post),
+              SizedBox(height: 12.h),
+            ],
 
             SizedBox(height: 12.h),
 
@@ -1186,11 +1222,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
             SizedBox(height: 16.h),
 
-            // Images
-            if (post.images.isNotEmpty) _buildImageGrid(post.images),
-
-            SizedBox(height: 16.h),
-
             // Stats row with improved design
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1198,10 +1229,10 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 Row(
                   children: [
                     _buildStatIcon(
-                      post.liked == true
+                      post.isLikedBy(_userId)
                           ? Icons.favorite
                           : Icons.favorite_border,
-                      post.liked == true
+                      post.isLikedBy(_userId)
                           ? NexoraColors.romanticPink
                           : NexoraColors.textMuted,
                       post.likes.toString(),
@@ -1229,16 +1260,16 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                     duration: const Duration(milliseconds: 200),
                     padding: EdgeInsets.all(8.r),
                     decoration: BoxDecoration(
-                      color: post.saved == true
+                      color: post.isSavedBy(_userId)
                           ? NexoraColors.accentCyan.withOpacity(0.15)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(10.r),
                     ),
                     child: Icon(
-                      post.saved == true
+                      post.isSavedBy(_userId)
                           ? Icons.bookmark
                           : Icons.bookmark_border,
-                      color: post.saved == true
+                      color: post.isSavedBy(_userId)
                           ? NexoraColors.accentCyan
                           : NexoraColors.textMuted,
                       size: 22.r,
@@ -1386,10 +1417,144 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  Widget _buildImageGrid(List<String> images) {
+  Widget _buildPollWidget(PostModel post) {
+    final poll = post.poll!;
+    int totalVotes = poll.votes.fold(0, (sum, v) => sum + v);
+    final userVote = poll.userVote(_userId);
+
+    return GlassContainer(
+      borderRadius: 16,
+      padding: EdgeInsets.all(12.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.poll_outlined,
+                color: NexoraColors.primaryPurple,
+                size: 20.r,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  poll.question,
+                  style: TextStyle(
+                    color: NexoraColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15.sp,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12.h),
+          ...List.generate(poll.options.length, (i) {
+            double percentage = totalVotes == 0
+                ? 0
+                : poll.votes[i] / totalVotes;
+            final bool isSelected = userVote == i;
+
+            return GestureDetector(
+              onTap: userVote == null
+                  ? () =>
+                        PostRepository.instance.voteInPoll(post.id, i, _userId)
+                  : null,
+              child: Container(
+                margin: EdgeInsets.only(bottom: 8.h),
+                child: Stack(
+                  children: [
+                    Container(
+                      height: 38.h,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8.r),
+                        border: isSelected
+                            ? Border.all(
+                                color: NexoraColors.primaryPurple,
+                                width: 1.w,
+                              )
+                            : null,
+                      ),
+                    ),
+                    FractionallySizedBox(
+                      widthFactor: percentage > 0 ? percentage : 0.01,
+                      child: Container(
+                        height: 38.h,
+                        decoration: BoxDecoration(
+                          gradient: NexoraGradients.primaryButton.withOpacity(
+                            isSelected ? 0.5 : 0.2,
+                          ),
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      height: 38.h,
+                      padding: EdgeInsets.symmetric(horizontal: 12.w),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Text(
+                                  poll.options[i],
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13.sp,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (isSelected) ...[
+                                  SizedBox(width: 8.w),
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: NexoraColors.primaryPurple,
+                                    size: 14.r,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '${(percentage * 100).toInt()}%',
+                            style: TextStyle(
+                              color: isSelected
+                                  ? NexoraColors.textPrimary
+                                  : NexoraColors.textMuted,
+                              fontSize: 11.sp,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          SizedBox(height: 4.h),
+          Text(
+            '$totalVotes votes',
+            style: TextStyle(color: NexoraColors.textMuted, fontSize: 11.sp),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageGrid(List<String> images, PostModel post) {
     if (images.length == 1) {
       return GestureDetector(
-        onTap: () => _openImageViewer(images, 0),
+        onTap: () => _openImageViewer(images, 0, post),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16.r),
           child: Stack(
@@ -1426,7 +1591,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => _openImageViewer(images, 0),
+              onTap: () => _openImageViewer(images, 0, post),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12.r),
                 child: Image.network(
@@ -1441,7 +1606,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
           SizedBox(width: 4.w),
           Expanded(
             child: GestureDetector(
-              onTap: () => _openImageViewer(images, 1),
+              onTap: () => _openImageViewer(images, 1, post),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12.r),
                 child: Image.network(
@@ -1459,7 +1624,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       return Column(
         children: [
           GestureDetector(
-            onTap: () => _openImageViewer(images, 0),
+            onTap: () => _openImageViewer(images, 0, post),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12.r),
               child: Image.network(
@@ -1475,7 +1640,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () => _openImageViewer(images, 1),
+                  onTap: () => _openImageViewer(images, 1, post),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12.r),
                     child: Image.network(
@@ -1490,7 +1655,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               SizedBox(width: 4.w),
               Expanded(
                 child: GestureDetector(
-                  onTap: () => _openImageViewer(images, 2),
+                  onTap: () => _openImageViewer(images, 2, post),
                   child: Stack(
                     children: [
                       ClipRRect(
@@ -1623,24 +1788,61 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             ),
             SizedBox(height: 16.h),
             SizedBox(
-              height: 80.h,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _buildShareContact('Sarah', NexoraColors.romanticPink, post),
-                  _buildShareContact('Mike', NexoraColors.primaryPurple, post),
-                  _buildShareContact('Emma', NexoraColors.accentCyan, post),
-                  _buildShareContact(
-                    'Alex',
-                    NexoraColors.primaryPurple.withOpacity(0.6),
-                    post,
-                  ),
-                  _buildShareContact(
-                    'Jordan',
-                    NexoraColors.primaryPurple,
-                    post,
-                  ),
-                ],
+              height: 100.h,
+              child: StreamBuilder<List<ChatModel>>(
+                stream: ChatRepository.instance.getConversations(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No recent chats',
+                        style: TextStyle(
+                          color: NexoraColors.textMuted,
+                          fontSize: 13.sp,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final conversations = snapshot.data!;
+                  return ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: conversations.length + 1, // +1 for "More"
+                    itemBuilder: (context, index) {
+                      if (index == conversations.length) {
+                        return Padding(
+                          padding: EdgeInsets.only(right: 20.w),
+                          child: _buildShareOption(
+                            Icons.more_horiz,
+                            "More",
+                            NexoraColors.textMuted,
+                            () => _shareMore(post),
+                          ),
+                        );
+                      }
+
+                      final chat = conversations[index];
+                      final otherUserId = chat.participantIds.firstWhere(
+                        (id) => id != _userId,
+                        orElse: () => '',
+                      );
+
+                      if (otherUserId.isEmpty) return const SizedBox.shrink();
+
+                      return FutureBuilder<UserModel?>(
+                        future: AuthRepository.instance.getUserProfile(
+                          otherUserId,
+                        ),
+                        builder: (context, userSnapshot) {
+                          if (!userSnapshot.hasData)
+                            return const SizedBox.shrink();
+                          final user = userSnapshot.data!;
+                          return _buildShareContact(user, post);
+                        },
+                      );
+                    },
+                  );
+                },
               ),
             ),
             SizedBox(height: 16.h),
@@ -1693,28 +1895,39 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  void _shareMore(PostModel post) {
+  void _shareMore(PostModel post) async {
     HapticFeedback.lightImpact();
-    Get.snackbar(
-      'Share',
-      'More sharing options coming soon!',
-      backgroundColor: NexoraColors.textMuted.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 2),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
+    await Share.share(
+      'Check out this post on Nexora: ${post.content}',
+      subject: 'Shared Post from Nexora',
     );
   }
 
-  Widget _buildShareContact(String name, Color color, PostModel post) {
+  Widget _buildShareContact(UserModel user, PostModel post) {
+    final color = NexoraColors.primaryPurple;
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         Get.back();
         HapticFeedback.lightImpact();
+
+        // Find or create chat
+        String? chatId = await ChatRepository.instance.findExistingChat(
+          user.id,
+        );
+        if (chatId == null) {
+          chatId = await ChatRepository.instance.createChat(user.id);
+        }
+
+        // Send message
+        await ChatRepository.instance.sendMessage(
+          type: MessageType.text,
+          content: 'Shared a post: ${post.content}',
+          chatId: chatId,
+        );
+
         Get.snackbar(
           'Shared!',
-          'Post shared with $name',
+          'Post shared with ${user.name}',
           backgroundColor: color.withOpacity(0.9),
           colorText: Colors.white,
           snackPosition: SnackPosition.TOP,
@@ -1744,24 +1957,46 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 ],
               ),
               child: Center(
-                child: Text(
-                  name[0],
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20.sp,
-                  ),
+                child: ClipOval(
+                  child: user.avatar != null && user.avatar!.isNotEmpty
+                      ? Image.network(
+                          user.avatar!,
+                          width: 56.w,
+                          height: 56.w,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Text(
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20.sp,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          user.name.isNotEmpty
+                              ? user.name[0].toUpperCase()
+                              : 'U',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20.sp,
+                          ),
+                        ),
                 ),
               ),
             ),
             SizedBox(height: 6.h),
             Text(
-              name,
+              user.name,
               style: TextStyle(
                 color: NexoraColors.textSecondary,
                 fontSize: 12.sp,
                 fontWeight: FontWeight.w500,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -1845,6 +2080,13 @@ class _CreatePostSheetState extends State<CreatePostSheet>
     '#fun',
   ];
 
+  // New features state
+  final List<String> _selectedImages = [];
+  String? _pollQuestion;
+  final List<String> _pollOptions = [];
+  String? _selectedFeeling;
+  final ImagePicker _picker = ImagePicker();
+
   @override
   void initState() {
     super.initState();
@@ -1854,6 +2096,220 @@ class _CreatePostSheetState extends State<CreatePostSheet>
       duration: const Duration(milliseconds: 300),
     );
     _focusNode.requestFocus();
+  }
+
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile>? images = await _picker.pickMultiImage();
+      if (images != null && images.isNotEmpty) {
+        setState(() {
+          _selectedImages.addAll(images.map((img) => img.path));
+          if (_selectedImages.length > 4) {
+            _selectedImages.removeRange(4, _selectedImages.length);
+            Get.snackbar('Limit reached', 'You can select up to 4 images');
+          }
+        });
+      }
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to pick images');
+    }
+  }
+
+  void _showPollEditor() {
+    final TextEditingController questionController = TextEditingController(
+      text: _pollQuestion,
+    );
+    final List<TextEditingController> optionControllers = _pollOptions.isEmpty
+        ? [TextEditingController(), TextEditingController()]
+        : _pollOptions.map((opt) => TextEditingController(text: opt)).toList();
+
+    Get.dialog(
+      StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.transparent,
+            contentPadding: EdgeInsets.zero,
+            content: GlassContainer(
+              borderRadius: 24.r,
+              padding: EdgeInsets.all(20.r),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create Poll',
+                    style: NexoraTextStyles.headline2.copyWith(fontSize: 20.sp),
+                  ),
+                  SizedBox(height: 16.h),
+                  TextField(
+                    controller: questionController,
+                    decoration: NexoraTheme.glassInputDecoration(
+                      'Poll Question',
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  SizedBox(height: 12.h),
+                  ...List.generate(optionControllers.length, (index) {
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: 8.h),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: optionControllers[index],
+                              decoration: NexoraTheme.glassInputDecoration(
+                                'Option ${index + 1}',
+                              ),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                          if (optionControllers.length > 2)
+                            IconButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  optionControllers.removeAt(index);
+                                });
+                              },
+                              icon: const Icon(
+                                Icons.remove_circle,
+                                color: NexoraColors.error,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                  if (optionControllers.length < 4)
+                    TextButton.icon(
+                      onPressed: () {
+                        setDialogState(() {
+                          optionControllers.add(TextEditingController());
+                        });
+                      },
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: NexoraColors.accentCyan,
+                      ),
+                      label: Text(
+                        'Add Option',
+                        style: TextStyle(color: NexoraColors.accentCyan),
+                      ),
+                    ),
+                  SizedBox(height: 20.h),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Get.back(),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: NexoraColors.textMuted),
+                        ),
+                      ),
+                      SizedBox(width: 12.w),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: NexoraColors.primaryPurple,
+                        ),
+                        onPressed: () {
+                          if (questionController.text.trim().isEmpty ||
+                              optionControllers.any(
+                                (c) => c.text.trim().isEmpty,
+                              )) {
+                            Get.snackbar(
+                              'Empty fields',
+                              'Please fill all poll fields',
+                            );
+                            return;
+                          }
+                          setState(() {
+                            _pollQuestion = questionController.text.trim();
+                            _pollOptions.clear();
+                            _pollOptions.addAll(
+                              optionControllers.map((c) => c.text.trim()),
+                            );
+                          });
+                          Get.back();
+                        },
+                        child: Text('Done'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showFeelingPicker() {
+    final Map<String, String> feelings = {
+      'Happy': '😊',
+      'Excited': '🤩',
+      'Blessed': '😇',
+      'Loved': '🥰',
+      'Cool': '😎',
+      'Thinking': '🤔',
+      'Tired': '😴',
+      'Focusing': '🧠',
+      'Celebrating': '🥳',
+    };
+
+    Get.bottomSheet(
+      GlassContainer(
+        borderRadius: 30, // Fixed: expecting double
+        padding: EdgeInsets.all(20.r),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'How are you feeling?',
+              style: NexoraTextStyles.headline2.copyWith(fontSize: 18.sp),
+            ),
+            SizedBox(height: 16.h),
+            Wrap(
+              spacing: 12.w,
+              runSpacing: 12.h,
+              children: feelings.entries
+                  .map(
+                    (f) => GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedFeeling = '${f.value} ${f.key}';
+                        });
+                        Get.back();
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.w,
+                          vertical: 8.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _selectedFeeling?.contains(f.key) == true
+                              ? NexoraColors.primaryPurple.withOpacity(0.3)
+                              : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(20.r),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                          ),
+                        ),
+                        child: Text(
+                          '${f.value} ${f.key}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+            SizedBox(height: 20.h),
+          ],
+        ),
+      ),
+    );
   }
 
   void _addHashtag(String hashtag) {
@@ -1870,61 +2326,92 @@ class _CreatePostSheetState extends State<CreatePostSheet>
     setState(() {});
   }
 
-  void _createPost() {
-    if (_postController.text.trim().isEmpty) return;
+  Future<void> _createPost() async {
+    if (_postController.text.trim().isEmpty && _selectedImages.isEmpty) return;
 
     setState(() => _isPosting = true);
 
-    final content = _postController.text.trim();
-    final hashtagRegex = RegExp(r'#\w+');
-    final hashtags = hashtagRegex
-        .allMatches(content)
-        .map((m) => m.group(0)!)
-        .toList();
+    try {
+      final List<String> imageUrls = [];
+      if (_selectedImages.isNotEmpty) {
+        for (String imagePath in _selectedImages) {
+          final file = File(imagePath);
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('posts')
+              .child(
+                '${DateTime.now().millisecondsSinceEpoch}_${imagePath.split('/').last}',
+              );
+          await ref.putFile(file);
+          imageUrls.add(await ref.getDownloadURL());
+        }
+      }
 
-    final username = widget.userName?.startsWith('@') == true
-        ? widget.userName!
-        : '@${(widget.userName ?? 'You').toLowerCase().replaceAll(' ', '.')}';
+      final content = _postController.text.trim();
+      final hashtagRegex = RegExp(r'#\w+');
+      final hashtags = hashtagRegex
+          .allMatches(content)
+          .map((m) => m.group(0)!)
+          .toList();
 
-    final postModel = PostModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      userId: fb.FirebaseAuth.instance.currentUser?.uid ?? '',
-      user: widget.userName ?? 'You',
-      username: username,
-      avatar: widget.userAvatar ?? (widget.userName ?? 'U')[0],
-      time: 'Just now',
-      content: content,
-      hashtags: hashtags,
-      images: <String>[],
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      liked: false,
-      saved: false,
-      commentsList: <CommentModel>[],
-      createdAt: DateTime.now(),
-    );
+      final username = widget.userName?.startsWith('@') == true
+          ? widget.userName!
+          : '@${(widget.userName ?? 'You').toLowerCase().replaceAll(' ', '.')}';
 
-    if (widget.onPostCreated != null) {
-      widget.onPostCreated!(postModel);
+      final postModel = PostModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userId: fb.FirebaseAuth.instance.currentUser?.uid ?? '',
+        user: widget.userName ?? 'You',
+        username: username,
+        avatar: widget.userAvatar ?? (widget.userName ?? 'U')[0],
+        time:
+            'Just now', // Keep for compatibility if needed, but we'll use createdAt
+        content: content,
+        hashtags: hashtags,
+        images: imageUrls,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        likedBy: const [],
+        savedBy: const [],
+        commentsList: <CommentModel>[],
+        createdAt: DateTime.now(),
+        poll: _pollQuestion != null
+            ? PollModel(
+                question: _pollQuestion!,
+                options: _pollOptions,
+                votes: List.filled(_pollOptions.length, 0),
+              )
+            : null,
+        feeling: _selectedFeeling,
+        visibility: _visibility,
+      );
+
+      if (widget.onPostCreated != null) {
+        await widget.onPostCreated!(postModel);
+      }
+
+      Get.back();
+      HapticFeedback.mediumImpact();
+
+      Get.snackbar(
+        widget.isEditing ? 'Post Updated!' : 'Post Created!',
+        widget.isEditing
+            ? 'Your post has been updated successfully'
+            : 'Your post is now live on the campus feed',
+        backgroundColor: NexoraColors.success.withOpacity(0.9),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 2),
+        margin: EdgeInsets.all(16.r),
+        borderRadius: 12.r,
+        icon: const Icon(Icons.check_circle, color: Colors.white),
+      );
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to create post: $e');
+    } finally {
+      if (mounted) setState(() => _isPosting = false);
     }
-
-    Get.back();
-    HapticFeedback.mediumImpact();
-
-    Get.snackbar(
-      widget.isEditing ? 'Post Updated!' : 'Post Created!',
-      widget.isEditing
-          ? 'Your post has been updated successfully'
-          : 'Your post is now live on the campus feed',
-      backgroundColor: NexoraColors.success.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 2),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
-      icon: const Icon(Icons.check_circle, color: Colors.white),
-    );
   }
 
   @override
@@ -1997,7 +2484,8 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                       },
                       child: GestureDetector(
                         onTap:
-                            _postController.text.trim().isNotEmpty &&
+                            (_postController.text.trim().isNotEmpty ||
+                                    _pollQuestion != null) &&
                                 !_isPosting
                             ? _createPost
                             : null,
@@ -2007,14 +2495,20 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                             vertical: 10.h,
                           ),
                           decoration: BoxDecoration(
-                            gradient: _postController.text.trim().isNotEmpty
+                            gradient:
+                                (_postController.text.trim().isNotEmpty ||
+                                    _pollOptions.isNotEmpty)
                                 ? NexoraGradients.primaryButton
                                 : null,
-                            color: _postController.text.trim().isEmpty
+                            color:
+                                (_postController.text.trim().isEmpty &&
+                                    _pollOptions.isEmpty)
                                 ? NexoraColors.textMuted.withOpacity(0.3)
                                 : null,
                             borderRadius: BorderRadius.circular(20.r),
-                            boxShadow: _postController.text.trim().isNotEmpty
+                            boxShadow:
+                                (_postController.text.trim().isNotEmpty ||
+                                    _pollOptions.isNotEmpty)
                                 ? [
                                     BoxShadow(
                                       color: NexoraColors.primaryPurple
@@ -2054,106 +2548,138 @@ class _CreatePostSheetState extends State<CreatePostSheet>
           ),
 
           // User info with enhanced visibility picker
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
-            child: Row(
-              children: [
-                Container(
-                  width: 52.w,
-                  height: 52.w,
-                  decoration: BoxDecoration(
-                    gradient: NexoraGradients.primaryButton,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: NexoraColors.primaryPurple.withOpacity(0.3),
-                        blurRadius: 8.r,
-                        spreadRadius: 1.r,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      (widget.userName ?? 'U').isNotEmpty
-                          ? (widget.userName ?? 'U').startsWith('@')
-                                ? (widget.userName ?? 'U')[1].toUpperCase()
-                                : (widget.userName ?? 'U')[0].toUpperCase()
-                          : 'U',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22.sp,
+          Obx(() {
+            final profile = AuthRepository.instance.currentUserProfile;
+            final displayName =
+                profile?.displayName ?? widget.userName ?? 'You';
+            final avatar = profile?.avatar;
+
+            String getInitial(String name) {
+              if (name.isEmpty) return 'U';
+              return name.startsWith('@')
+                  ? name[1].toUpperCase()
+                  : name[0].toUpperCase();
+            }
+
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52.w,
+                    height: 52.w,
+                    decoration: BoxDecoration(
+                      gradient: NexoraGradients.primaryButton,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: NexoraColors.primaryPurple.withOpacity(0.3),
+                          blurRadius: 8.r,
+                          spreadRadius: 1.r,
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: ClipOval(
+                        child: (avatar != null && avatar.isNotEmpty)
+                            ? Image.network(
+                                avatar,
+                                width: 52.w,
+                                height: 52.w,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Center(
+                                      child: Text(
+                                        getInitial(displayName),
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 22.sp,
+                                        ),
+                                      ),
+                                    ),
+                              )
+                            : Center(
+                                child: Text(
+                                  getInitial(displayName),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22.sp,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                   ),
-                ),
-                SizedBox(width: 12.w),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.userName ?? 'You',
-                        style: TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17.sp,
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          style: TextStyle(
+                            color: NexoraColors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17.sp,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 4.h),
-                      GestureDetector(
-                        onTap: _showVisibilityPicker,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.w,
-                            vertical: 6.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: NexoraColors.glassBackground,
-                            borderRadius: BorderRadius.circular(20.r),
-                            border: Border.all(
-                              color: NexoraColors.primaryPurple.withOpacity(
-                                0.3,
-                              ),
+                        SizedBox(height: 4.h),
+                        GestureDetector(
+                          onTap: _showVisibilityPicker,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 10.w,
+                              vertical: 6.h,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _visibility == 'Public'
-                                    ? Icons.public
-                                    : _visibility == 'Campus'
-                                    ? Icons.school
-                                    : Icons.lock,
-                                size: 14.r,
-                                color: NexoraColors.accentCyan,
-                              ),
-                              SizedBox(width: 6.w),
-                              Text(
-                                _visibility,
-                                style: TextStyle(
-                                  color: NexoraColors.textSecondary,
-                                  fontSize: 13.sp,
-                                  fontWeight: FontWeight.w500,
+                            decoration: BoxDecoration(
+                              color: NexoraColors.glassBackground,
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(
+                                color: NexoraColors.primaryPurple.withOpacity(
+                                  0.3,
                                 ),
                               ),
-                              SizedBox(width: 4.w),
-                              Icon(
-                                Icons.arrow_drop_down,
-                                size: 16.r,
-                                color: NexoraColors.textMuted,
-                              ),
-                            ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _visibility == 'Public'
+                                      ? Icons.public
+                                      : _visibility == 'Campus'
+                                      ? Icons.school
+                                      : Icons.lock,
+                                  size: 14.r,
+                                  color: NexoraColors.accentCyan,
+                                ),
+                                SizedBox(width: 6.w),
+                                Text(
+                                  _visibility,
+                                  style: TextStyle(
+                                    color: NexoraColors.textSecondary,
+                                    fontSize: 13.sp,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                SizedBox(width: 4.w),
+                                Icon(
+                                  Icons.arrow_drop_down,
+                                  size: 16.r,
+                                  color: NexoraColors.textMuted,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          }),
 
           // Post content with character count
           Expanded(
@@ -2227,6 +2753,129 @@ class _CreatePostSheetState extends State<CreatePostSheet>
               ),
             ),
           ),
+
+          // Selected Images Preview
+          if (_selectedImages.isNotEmpty)
+            Container(
+              height: 120.h,
+              padding: EdgeInsets.symmetric(horizontal: 16.w),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _selectedImages.length,
+                itemBuilder: (context, index) {
+                  return Stack(
+                    children: [
+                      Container(
+                        margin: EdgeInsets.only(right: 12.w, top: 8.h),
+                        width: 100.w,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12.r),
+                          image: DecorationImage(
+                            image: FileImage(File(_selectedImages[index])),
+                            fit: BoxFit.cover,
+                          ),
+                          border: Border.all(
+                            color: NexoraColors.primaryPurple.withOpacity(0.3),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 4.w,
+                        top: 0,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedImages.removeAt(index);
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.all(4.r),
+                            decoration: const BoxDecoration(
+                              color: NexoraColors.error,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 14.r,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+          // Poll Preview
+          if (_pollQuestion != null)
+            Padding(
+              padding: EdgeInsets.all(16.r),
+              child: GlassContainer(
+                borderRadius: 16.r,
+                padding: EdgeInsets.all(12.r),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.poll_outlined,
+                          color: NexoraColors.primaryPurple,
+                          size: 20.r,
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: Text(
+                            _pollQuestion!,
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15.sp,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _pollQuestion = null;
+                              _pollOptions.clear();
+                            });
+                          },
+                          icon: Icon(
+                            Icons.close,
+                            color: NexoraColors.textMuted,
+                            size: 18.r,
+                          ),
+                        ),
+                      ],
+                    ),
+                    ..._pollOptions.map(
+                      (opt) => Container(
+                        margin: EdgeInsets.only(top: 8.h),
+                        padding: EdgeInsets.all(10.r),
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10.r),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                          ),
+                        ),
+                        child: Text(
+                          opt,
+                          style: TextStyle(
+                            color: NexoraColors.textSecondary,
+                            fontSize: 13.sp,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // Quick hashtags with improved design
           Container(
@@ -2320,21 +2969,13 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                     'Photo',
                     NexoraColors.accentCyan,
                   ),
-                  _buildActionButton(
-                    Icons.videocam_outlined,
-                    'Video',
-                    NexoraColors.romanticPink,
-                  ),
+
                   _buildActionButton(
                     Icons.poll_outlined,
                     'Poll',
                     NexoraColors.primaryPurple,
                   ),
-                  _buildActionButton(
-                    Icons.location_on_outlined,
-                    'Location',
-                    NexoraColors.success,
-                  ),
+
                   _buildActionButton(
                     Icons.emoji_emotions_outlined,
                     'Feeling',
@@ -2353,16 +2994,24 @@ class _CreatePostSheetState extends State<CreatePostSheet>
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        Get.snackbar(
-          'Coming Soon',
-          'The $label feature is under development',
-          backgroundColor: color.withOpacity(0.9),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 1),
-          margin: EdgeInsets.all(16.r),
-          borderRadius: 12.r,
-        );
+        if (label == 'Photo') {
+          _pickImages();
+        } else if (label == 'Poll') {
+          _showPollEditor();
+        } else if (label == 'Feeling') {
+          _showFeelingPicker();
+        } else {
+          Get.snackbar(
+            'Coming Soon',
+            'The $label feature is under development',
+            backgroundColor: color.withOpacity(0.9),
+            colorText: Colors.white,
+            snackPosition: SnackPosition.TOP,
+            duration: const Duration(seconds: 1),
+            margin: EdgeInsets.all(16.r),
+            borderRadius: 12.r,
+          );
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -3077,9 +3726,11 @@ class _CommentsSheetState extends State<CommentsSheet> {
 class ImageViewerScreen extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
+  final PostModel post;
 
   const ImageViewerScreen({
     required this.images,
+    required this.post,
     this.initialIndex = 0,
     super.key,
   });
@@ -3115,20 +3766,16 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
   }
 
   void _doubleTapLike() {
+    if (!widget.post.likedBy.contains(ChatRepository.instance.currentUserId!)) {
+      PostRepository.instance.toggleLike(
+        widget.post.id,
+        ChatRepository.instance.currentUserId!,
+      );
+    }
     _likeAnimationController.forward().then(
       (_) => _likeAnimationController.reverse(),
     );
     HapticFeedback.heavyImpact();
-    Get.snackbar(
-      'Liked',
-      'Added to your likes',
-      backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(milliseconds: 800),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
-    );
   }
 
   @override
@@ -3239,9 +3886,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
               animation: _likeAnimationController,
               builder: (context, child) {
                 return Opacity(
-                  opacity: 1 - _likeAnimationController.value,
+                  opacity: _likeAnimationController.value,
                   child: Transform.scale(
-                    scale: 1 + (_likeAnimationController.value * 0.5),
+                    scale: 0.5 + (_likeAnimationController.value * 1.0),
                     child: Container(
                       color: Colors.transparent,
                       child: Center(
@@ -3352,9 +3999,70 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildBottomAction(Icons.download_outlined, 'Save'),
-                    _buildBottomAction(Icons.share_outlined, 'Share'),
-                    _buildBottomAction(Icons.favorite_border, 'Like'),
+                    _buildBottomAction(
+                      Icons.download_outlined,
+                      'Save',
+                      onTap: () {
+                        PostRepository.instance.toggleSave(
+                          widget.post.id,
+                          ChatRepository.instance.currentUserId!,
+                        );
+                        Get.snackbar(
+                          'Saved',
+                          'Post saved successfully',
+                          backgroundColor: NexoraColors.success.withOpacity(
+                            0.9,
+                          ),
+                          colorText: Colors.white,
+                          snackPosition: SnackPosition.TOP,
+                        );
+                      },
+                    ),
+                    _buildBottomAction(
+                      Icons.share_outlined,
+                      'Share',
+                      onTap: () {
+                        // Implement sharing logic
+                        Clipboard.setData(
+                          ClipboardData(text: widget.images[_currentIndex]),
+                        );
+                        Get.snackbar(
+                          'Shared',
+                          'Link copied to clipboard',
+                          backgroundColor: NexoraColors.primaryPurple
+                              .withOpacity(0.9),
+                          colorText: Colors.white,
+                          snackPosition: SnackPosition.TOP,
+                        );
+                      },
+                    ),
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('feed')
+                          .doc(widget.post.id)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final isLiked =
+                            snapshot.hasData &&
+                            ((snapshot.data!.data()
+                                        as Map<String, dynamic>)['likedBy'] ??
+                                    [])
+                                .contains(
+                                  ChatRepository.instance.currentUserId!,
+                                );
+                        return _buildBottomAction(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          'Like',
+                          color: isLiked ? NexoraColors.romanticPink : null,
+                          onTap: () {
+                            PostRepository.instance.toggleLike(
+                              widget.post.id,
+                              ChatRepository.instance.currentUserId!,
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -3365,20 +4073,18 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
     );
   }
 
-  Widget _buildBottomAction(IconData icon, String label) {
+  Widget _buildBottomAction(
+    IconData icon,
+    String label, {
+    VoidCallback? onTap,
+    Color? color,
+  }) {
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        Get.snackbar(
-          label,
-          'Feature coming soon!',
-          backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 1),
-          margin: EdgeInsets.all(16.r),
-          borderRadius: 12.r,
-        );
+        if (onTap != null) {
+          onTap();
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -3389,7 +4095,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
               color: Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: Colors.white, size: 24.r),
+            child: Icon(icon, color: color ?? Colors.white, size: 24.r),
           ),
           SizedBox(height: 6.h),
           Text(

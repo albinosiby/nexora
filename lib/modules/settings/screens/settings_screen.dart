@@ -23,11 +23,11 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
-  bool _darkModeEnabled = true;
+  final bool _darkModeEnabled = true;
   bool _messageNotifications = true;
   bool _feedNotifications = true;
-  bool _showOnlineStatus = true;
-  bool _showLastSeen = true;
+  final bool _showOnlineStatus = true;
+  final bool _showLastSeen = true;
 
   @override
   void initState() {
@@ -307,7 +307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: color,
+            activeThumbColor: color,
             activeTrackColor: color.withOpacity(0.5),
           ),
         ],

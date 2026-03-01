@@ -65,7 +65,7 @@ class ChatRepository extends GetxService {
   }
 
   /// Send a message
-  Future<void> sendMessage({
+  Future<String> sendMessage({
     required String chatId,
     required String content,
     MessageType type = MessageType.text,
@@ -75,7 +75,7 @@ class ChatRepository extends GetxService {
     String? replyToContent,
     String? replyToSenderId,
   }) async {
-    if (currentUserId == null) return;
+    if (currentUserId == null) return '';
 
     final messageRef = _db.ref('messages/$chatId').push();
     final messageId = messageRef.key!;
@@ -101,6 +101,8 @@ class ChatRepository extends GetxService {
     await chatRef.update({
       'lastMessage': content,
       'lastMessageTime': ServerValue.timestamp,
+      'lastMessageSenderId': currentUserId,
+      'lastMessageStatus': 'sent',
     });
 
     // Update User Chats (for sorting and unread counts)
@@ -121,6 +123,8 @@ class ChatRepository extends GetxService {
         await userChatRef.update({'lastMessageTime': ServerValue.timestamp});
       }
     }
+
+    return messageId;
   }
 
   /// Find an existing chat with another user
@@ -183,6 +187,67 @@ class ChatRepository extends GetxService {
   Future<void> markAsRead(String chatId) async {
     if (currentUserId == null) return;
     await _db.ref('user_chats/$currentUserId/$chatId/unreadCount').set(0);
+
+    // Update messages from other participants to 'seen'
+    final messagesRef = _db.ref('messages/$chatId');
+    final snapshot = await messagesRef.get();
+    if (snapshot.exists) {
+      final updates = <String, dynamic>{};
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+      data.forEach((id, value) {
+        final msgData = Map<String, dynamic>.from(value as Map);
+        if (msgData['senderId'] != currentUserId && msgData['isRead'] != true) {
+          updates['$id/isRead'] = true;
+          updates['$id/isDelivered'] = true;
+        }
+      });
+      if (updates.isNotEmpty) {
+        await messagesRef.update(updates);
+
+        // If the last message was one of these, update chat status
+        final chatRef = _db.ref('chats/$chatId');
+        final chatSnapshot = await chatRef.get();
+        if (chatSnapshot.exists) {
+          final chatData = Map<String, dynamic>.from(chatSnapshot.value as Map);
+          if (chatData['lastMessageSenderId'] != currentUserId) {
+            await chatRef.update({'lastMessageStatus': 'seen'});
+          }
+        }
+      }
+    }
+  }
+
+  /// Mark messages as delivered
+  Future<void> markMessagesAsDelivered(String chatId) async {
+    if (currentUserId == null) return;
+
+    final messagesRef = _db.ref('messages/$chatId');
+    final snapshot = await messagesRef.get();
+    if (snapshot.exists) {
+      final updates = <String, dynamic>{};
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+      data.forEach((id, value) {
+        final msgData = Map<String, dynamic>.from(value as Map);
+        if (msgData['senderId'] != currentUserId &&
+            msgData['isDelivered'] != true) {
+          updates['$id/isDelivered'] = true;
+        }
+      });
+      if (updates.isNotEmpty) {
+        await messagesRef.update(updates);
+
+        // Update chat status if last message was from the other user
+        final chatRef = _db.ref('chats/$chatId');
+        final chatSnapshot = await chatRef.get();
+        if (chatSnapshot.exists) {
+          final chatData = Map<String, dynamic>.from(chatSnapshot.value as Map);
+          if (chatData['lastMessageSenderId'] != currentUserId &&
+              chatData['lastMessageStatus'] == 'sent') {
+            await chatRef.update({'lastMessageStatus': 'delivered'});
+          }
+        }
+      }
+    }
   }
 
   /// Update typing status

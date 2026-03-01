@@ -6,6 +6,7 @@ import '../../connections/repositories/connection_service.dart';
 import '../../notifications/screens/notification_screen.dart';
 import '../../notifications/controllers/notification_controller.dart';
 import '../../profile/screens/profile_view_screen.dart';
+import '../../profile/repositories/user_repository.dart';
 import '../models/match_user_model.dart';
 import '../controllers/match_controller.dart';
 
@@ -546,30 +547,38 @@ class _MatchScreenState extends State<MatchScreen>
                       ),
                     ),
                   ),
-                  // Online indicator
-                  if (user.isOnline)
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Container(
-                        width: 14.r,
-                        height: 14.r,
-                        decoration: BoxDecoration(
-                          color: NexoraColors.success,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: NexoraColors.midnightDark,
-                            width: 2.5.w,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: NexoraColors.success.withOpacity(0.5),
-                              blurRadius: 6.r,
-                            ),
-                          ],
-                        ),
-                      ),
+                  // Online indicator (real-time from RTDB)
+                  StreamBuilder<bool>(
+                    stream: UserRepository.instance.getUserPresenceStream(
+                      user.id,
                     ),
+                    builder: (context, snapshot) {
+                      final isOnline = snapshot.data ?? user.isOnline;
+                      if (!isOnline) return const SizedBox.shrink();
+                      return Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          width: 14.r,
+                          height: 14.r,
+                          decoration: BoxDecoration(
+                            color: NexoraColors.success,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: NexoraColors.midnightDark,
+                              width: 2.5.w,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: NexoraColors.success.withOpacity(0.5),
+                                blurRadius: 6.r,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
                   // Action buttons
                 ],

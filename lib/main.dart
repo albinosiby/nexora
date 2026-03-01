@@ -5,6 +5,7 @@ import 'core/theme/nexora_theme.dart';
 import 'modules/auth/screens/splash_screen.dart';
 import 'modules/connections/repositories/connection_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'firebase_options.dart';
 import 'modules/auth/repositories/auth_repository.dart';
 import 'modules/feed/repositories/feed_repo.dart';
@@ -13,6 +14,7 @@ import 'modules/chat/repositories/chat_repository.dart';
 import 'modules/discover/repositories/match_repository.dart';
 import 'modules/discover/controllers/match_controller.dart';
 import 'modules/notifications/controllers/notification_controller.dart';
+import 'core/controllers/media_controller.dart';
 import 'core/services/spotify_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/push_notification_service.dart';
@@ -23,8 +25,15 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // Enable Realtime Database persistence
+  FirebaseDatabase.instance.setPersistenceEnabled(true);
+  FirebaseDatabase.instance.setPersistenceCacheSizeBytes(
+    100 * 1024 * 1024,
+  ); // 100MB
+
   // Initialize services
   Get.put(AuthRepository());
+  Get.put(MediaController());
   Get.put(PostRepository());
   Get.put(UserRepository());
   Get.put(ChatRepository());

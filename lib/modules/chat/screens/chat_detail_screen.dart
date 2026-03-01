@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
+import '../../../core/controllers/media_controller.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:image_picker/image_picker.dart';
@@ -56,25 +59,33 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _activeChatId;
   bool _isTyping = false;
   bool _isOnline = false;
+  bool _isVerified = false;
   Timer? _typingTimer;
   StreamSubscription? _messageSubscription;
   StreamSubscription? _typingSubscription;
   StreamSubscription? _onlineSubscription;
+  StreamSubscription? _profileSubscription;
   List<MessageModel> _messages = [];
   bool _isLoading = true;
 
   // Voice recording
   bool _isRecording = false;
+  bool _isRecordingLocked = false;
   int _recordingDuration = 0;
   Timer? _recordingTimer;
   late final AnimationController _pulseAnimation;
   double _slideOffset = 0.0;
+  double _verticalSlideOffset = 0.0;
   static const double _cancelThreshold = -120.0;
+  static const double _lockThreshold = -80.0;
   bool _recordingCancelled = false;
   double _longPressStartX = 0.0;
+  double _longPressStartY = 0.0;
 
   // State
   bool _isUploadingAudio = false;
+  bool _isSending = false;
+  final RxSet<String> _downloadingIds = <String>{}.obs;
   bool _showEmojiKeyboard = false;
 
   // Reply
@@ -129,6 +140,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _messageSubscription?.cancel();
       _typingSubscription?.cancel();
       _onlineSubscription?.cancel();
+      _profileSubscription?.cancel();
 
       // Message stream
       _messageSubscription = _chatRepo.getMessagesStream(_activeChatId!).listen(
@@ -139,6 +151,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               _isLoading = false;
             });
             _scrollToBottom();
+            _chatRepo.markMessagesAsDelivered(_activeChatId!);
+            _chatRepo.markAsRead(_activeChatId!);
           }
         },
       );
@@ -153,12 +167,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               }
             });
 
-        // Online stream
+        // Online stream (from RTDB for real-time presence)
         _onlineSubscription = _userRepo
-            .getUserStream(widget.participantId!)
-            .listen((user) {
+            .getUserPresenceStream(widget.participantId!)
+            .listen((isOnline) {
               if (mounted) {
-                setState(() => _isOnline = user?.isOnline ?? false);
+                setState(() => _isOnline = isOnline);
+              }
+            });
+
+        // Profile stream (for verification badge, etc.)
+        _profileSubscription = _userRepo
+            .getUserStream(widget.participantId!)
+            .listen((profile) {
+              if (mounted && profile != null) {
+                setState(() {
+                  _isVerified = profile.isVerified;
+                });
               }
             });
       }
@@ -210,35 +235,46 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   void _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isSending) return;
 
-    if (_activeChatId == null) {
-      if (widget.participantId == null) return;
-      final newChatId = await _chatRepo.createChat(widget.participantId!);
-      if (newChatId.isEmpty) return;
+    setState(() => _isSending = true);
 
-      setState(() {
-        _activeChatId = newChatId;
-      });
-      _setupStreams();
+    try {
+      if (_activeChatId == null) {
+        if (widget.participantId == null) return;
+        final newChatId = await _chatRepo.createChat(widget.participantId!);
+        if (newChatId.isEmpty) return;
+
+        setState(() {
+          _activeChatId = newChatId;
+        });
+        _setupStreams();
+      }
+
+      // Capture reply before clearing state for optimistic feel
+      final replyMsg = _replyingToMessage;
+      _messageController.clear();
+      setState(() => _replyingToMessage = null);
+
+      await _chatRepo.sendMessage(
+        chatId: _activeChatId!,
+        content: text,
+        replyToId: replyMsg?.id,
+        replyToContent: replyMsg?.content,
+        replyToSenderId: replyMsg?.senderId,
+      );
+      _scrollToBottom();
+    } catch (e) {
+      print('Send Message Error: $e');
+      Get.snackbar('Error', 'Failed to send message');
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
     }
-
-    // Capture reply before clearing state for optimistic feel
-    final replyMsg = _replyingToMessage;
-    _messageController.clear();
-    setState(() => _replyingToMessage = null);
-
-    await _chatRepo.sendMessage(
-      chatId: _activeChatId!,
-      content: text,
-      replyToId: replyMsg?.id,
-      replyToContent: replyMsg?.content,
-      replyToSenderId: replyMsg?.senderId,
-    );
-    _scrollToBottom();
   }
 
-  void _startRecording(LongPressStartDetails details) async {
+  void _startRecording(LongPressStartDetails? details) async {
     try {
       if (await _audioRecorder.hasPermission()) {
         final directory = await getApplicationDocumentsDirectory();
@@ -252,12 +288,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         if (mounted) {
           setState(() {
             _isRecording = true;
+            _isRecordingLocked = false;
             _recordingDuration = 0;
             _slideOffset = 0.0;
+            _verticalSlideOffset = 0.0;
             _recordingCancelled = false;
-            _longPressStartX = details.globalPosition.dx;
+            if (details != null) {
+              _longPressStartX = details.globalPosition.dx;
+              _longPressStartY = details.globalPosition.dy;
+            }
           });
 
+          HapticFeedback.mediumImpact();
           _pulseAnimation.repeat(reverse: true);
           _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
             if (mounted) setState(() => _recordingDuration++);
@@ -277,19 +319,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
-  void _stopRecording() async {
+  void _stopRecording({bool send = true}) async {
+    if (!_isRecording) return;
+
     _recordingTimer?.cancel();
     _pulseAnimation.stop();
     _pulseAnimation.reset();
 
-    final wasCancelled = _recordingCancelled;
+    final wasCancelled = _recordingCancelled || !send;
     final duration = _recordingDuration;
     final path = await _audioRecorder.stop();
 
     setState(() {
       _isRecording = false;
+      _isRecordingLocked = false;
       _recordingDuration = 0;
       _slideOffset = 0.0;
+      _verticalSlideOffset = 0.0;
       _recordingCancelled = false;
     });
 
@@ -316,15 +362,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
-    if (!_isRecording || _recordingCancelled) return;
+    if (!_isRecording || _recordingCancelled || _isRecordingLocked) return;
 
     final deltaX = details.globalPosition.dx - _longPressStartX;
+    final deltaY = details.globalPosition.dy - _longPressStartY;
+
     setState(() {
       _slideOffset = deltaX.clamp(_cancelThreshold - 20, 0.0);
+      _verticalSlideOffset = deltaY.clamp(_lockThreshold - 20, 0.0);
     });
 
-    // Auto-cancel when threshold is reached
-    if (_slideOffset <= _cancelThreshold) {
+    // Auto-lock when vertical threshold is reached
+    if (_verticalSlideOffset <= _lockThreshold) {
+      setState(() {
+        _isRecordingLocked = true;
+        _slideOffset = 0.0;
+        _verticalSlideOffset = 0.0;
+      });
+      HapticFeedback.heavyImpact();
+    }
+    // Auto-cancel when horizontal threshold is reached
+    else if (_slideOffset <= _cancelThreshold) {
+      HapticFeedback.mediumImpact();
       _cancelRecording();
     }
   }
@@ -354,6 +413,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _sendVoiceMessage(String path, int duration) async {
+    if (_isSending) return;
+
     if (_activeChatId == null) {
       if (widget.participantId == null) return;
       final newChatId = await _chatRepo.createChat(widget.participantId!);
@@ -366,7 +427,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     // Capture reply before clearing
     final replyMsg = _replyingToMessage;
-    setState(() => _replyingToMessage = null);
+    setState(() {
+      _isSending = true;
+      _replyingToMessage = null;
+    });
 
     try {
       final file = File(path);
@@ -389,7 +453,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
       final downloadUrl = await _storageService.uploadFile(file, storagePath);
 
-      await _chatRepo.sendMessage(
+      final messageId = await _chatRepo.sendMessage(
         chatId: _activeChatId!,
         content: 'Voice message',
         type: MessageType.voice,
@@ -399,11 +463,48 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         replyToContent: replyMsg?.content,
         replyToSenderId: replyMsg?.senderId,
       );
+
+      // Cache the local path for the sender immediately
+      MediaController.instance.markAsDownloaded(messageId, path);
+
       _scrollToBottom();
     } catch (e) {
       Get.snackbar('Error', 'Failed to send voice message: $e');
     } finally {
-      if (mounted) setState(() => _isUploadingAudio = false);
+      if (mounted) {
+        setState(() {
+          _isUploadingAudio = false;
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _downloadAudio(MessageModel message) async {
+    if (message.mediaUrl == null || _downloadingIds.contains(message.id))
+      return;
+
+    try {
+      _downloadingIds.add(message.id);
+
+      final response = await http.get(Uri.parse(message.mediaUrl!));
+      if (response.statusCode == 200) {
+        final directory = await getApplicationDocumentsDirectory();
+        final path =
+            '${directory.path}/voice_${message.id}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final file = File(path);
+        await file.writeAsBytes(response.bodyBytes);
+
+        MediaController.instance.markAsDownloaded(message.id, path);
+        if (mounted) setState(() {});
+      } else {
+        Get.snackbar('Error', 'Failed to download audio');
+      }
+    } catch (e) {
+      print('Download Error: $e');
+      Get.snackbar('Error', 'Failed to download audio: $e');
+    } finally {
+      _downloadingIds.remove(message.id);
     }
   }
 
@@ -467,8 +568,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               if (_showEmojiKeyboard) _buildInlineEmojiPicker(),
             ],
           ),
-          if (_isRecording) _buildRecordingOverlay(),
+          if (_isRecording) ...[
+            _buildRecordingBackground(),
+            _buildRecordingOverlay(),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecordingBackground() {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: _isRecordingLocked ? () => _stopRecording(send: false) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          color: Colors.black.withOpacity(_isRecording ? 0.6 : 0.0),
+          child: BackdropFilter(
+            filter: ColorFilter.mode(
+              Colors.black.withOpacity(_isRecording ? 0.4 : 0.0),
+              BlendMode.darken,
+            ),
+            child: Container(),
+          ),
+        ),
       ),
     );
   }
@@ -514,19 +637,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      SizedBox(width: 4.w),
-                      Container(
-                        padding: EdgeInsets.all(2.r),
-                        decoration: const BoxDecoration(
-                          color: NexoraColors.accentCyan,
-                          shape: BoxShape.circle,
+                      if (_isVerified) ...[
+                        SizedBox(width: 4.w),
+                        Container(
+                          padding: EdgeInsets.all(2.r),
+                          decoration: const BoxDecoration(
+                            color: NexoraColors.accentCyan,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.check,
+                            size: 8.r,
+                            color: Colors.white,
+                          ),
                         ),
-                        child: Icon(
-                          Icons.check,
-                          size: 8.r,
-                          color: Colors.white,
-                        ),
-                      ),
+                      ],
                     ],
                   ),
                   SizedBox(height: 2.h),
@@ -857,12 +982,24 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
                 // Send or Voice button
                 GestureDetector(
-                  onTap: hasText ? _sendMessage : null,
-                  onLongPressStart: hasText ? null : _startRecording,
-                  onLongPressMoveUpdate: hasText
+                  onTap: _isSending
+                      ? null
+                      : (hasText
+                            ? _sendMessage
+                            : (_isRecording
+                                  ? () => _stopRecording()
+                                  : null)), // Removed one-tap _startRecording(null)
+                  onLongPressStart: (hasText || _isSending)
+                      ? null
+                      : _startRecording,
+                  onLongPressMoveUpdate: (hasText || _isSending)
                       ? null
                       : _onLongPressMoveUpdate,
-                  onLongPressEnd: hasText ? null : (_) => _stopRecording(),
+                  onLongPressEnd: (hasText || _isSending)
+                      ? null
+                      : (_) {
+                          if (!_isRecordingLocked) _stopRecording();
+                        },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 44.r,
@@ -878,11 +1015,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         ),
                       ],
                     ),
-                    child: Icon(
-                      hasText ? Icons.send_rounded : Icons.mic_rounded,
-                      color: Colors.white,
-                      size: 22.r,
-                    ),
+                    child: _isSending
+                        ? Padding(
+                            padding: EdgeInsets.all(12.r),
+                            child: const CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Icon(
+                            hasText ? Icons.send_rounded : Icons.mic_rounded,
+                            color: Colors.white,
+                            size: 22.r,
+                          ),
                   ),
                 ),
               ],
@@ -1053,242 +1198,289 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _buildRecordingOverlay() {
     final slideProgress = (_slideOffset / _cancelThreshold).clamp(0.0, 1.0);
+    final lockProgress = (_verticalSlideOffset / _lockThreshold).clamp(
+      0.0,
+      1.0,
+    );
     final isNearCancel = slideProgress > 0.7;
 
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-        decoration: BoxDecoration(
-          color: NexoraColors.midnightDark,
-          border: Border(
-            top: BorderSide(color: NexoraColors.glassBorder.withOpacity(0.3)),
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              // Cancel button (always visible) / Trash icon (when sliding)
-              GestureDetector(
-                onTap: _cancelRecording,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 44.r,
-                  height: 44.r,
-                  decoration: BoxDecoration(
-                    color: slideProgress > 0.3
-                        ? NexoraColors.error.withOpacity(0.2)
-                        : NexoraColors.glassBackground,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: slideProgress > 0.3
-                          ? NexoraColors.error.withOpacity(0.5)
-                          : NexoraColors.glassBorder,
-                    ),
-                  ),
-                  child: Icon(
-                    slideProgress > 0.3
-                        ? Icons.delete_rounded
-                        : Icons.close_rounded,
-                    color: slideProgress > 0.3
-                        ? NexoraColors.error
-                        : NexoraColors.textMuted,
-                    size: 22.r,
-                  ),
-                ),
-              ),
-
-              SizedBox(width: 8.w),
-
-              // Slide to cancel section
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragUpdate: (details) {
-                    setState(() {
-                      _slideOffset = (_slideOffset + details.delta.dx).clamp(
-                        _cancelThreshold - 20.w,
-                        0.0,
-                      );
-                    });
-                  },
-                  onHorizontalDragEnd: (details) {
-                    if (_slideOffset <= _cancelThreshold) {
-                      _cancelRecording();
-                    } else {
-                      setState(() => _slideOffset = 0.0);
-                    }
-                  },
-                  onTap: () {
-                    // Tapping the bar cancels recording
-                    _cancelRecording();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 50),
-                    transform: Matrix4.translationValues(_slideOffset, 0, 0),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 12.w,
-                      vertical: 10.h,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isNearCancel
-                          ? NexoraColors.error.withOpacity(0.1)
-                          : NexoraColors.glassBackground,
-                      borderRadius: BorderRadius.circular(24.r),
-                      border: Border.all(
-                        color: isNearCancel
-                            ? NexoraColors.error.withOpacity(0.3)
-                            : NexoraColors.glassBorder,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Lock Indicator (Slides up)
+          if (!_isRecordingLocked && _isRecording && _slideOffset == 0)
+            Positioned(
+              right: 16.w,
+              bottom: 100.h - (_verticalSlideOffset).abs(),
+              child: AnimatedOpacity(
+                opacity: (1.0 - (lockProgress * 0.7)).clamp(0.1, 1.0),
+                duration: const Duration(milliseconds: 50),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8.r),
+                      decoration: BoxDecoration(
+                        color: NexoraColors.primaryPurple.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.lock_outline_rounded,
+                        color: NexoraColors.primaryPurple,
+                        size: 24.r,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        // Recording indicator dot
-                        AnimatedBuilder(
-                          animation: _pulseAnimation,
-                          builder: (context, child) {
-                            return Container(
-                              width: 12.r,
-                              height: 12.r,
-                              decoration: BoxDecoration(
-                                color: NexoraColors.error.withOpacity(
-                                  0.6 + (_pulseAnimation.value * 0.4),
-                                ),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: NexoraColors.error.withOpacity(
-                                      0.4 * _pulseAnimation.value,
-                                    ),
-                                    blurRadius: 6.r,
-                                    spreadRadius: 1.r,
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                        SizedBox(width: 10.w),
-
-                        // Timer
-                        Text(
-                          _formatDuration(_recordingDuration),
-                          style: TextStyle(
-                            color: NexoraColors.textPrimary,
-                            fontSize: 16.sp,
-                            fontWeight: FontWeight.w600,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        // Slide to cancel with animated chevrons
-                        AnimatedOpacity(
-                          opacity: 1.0 - slideProgress,
-                          duration: const Duration(milliseconds: 100),
-                          child: Row(
-                            children: [
-                              AnimatedBuilder(
-                                animation: _pulseAnimation,
-                                builder: (context, child) {
-                                  return Transform.translate(
-                                    offset: Offset(
-                                      -4.w * _pulseAnimation.value,
-                                      0,
-                                    ),
-                                    child: Icon(
-                                      Icons.chevron_left_rounded,
-                                      color: NexoraColors.textMuted.withOpacity(
-                                        0.5 + (_pulseAnimation.value * 0.5),
-                                      ),
-                                      size: 18.r,
-                                    ),
-                                  );
-                                },
-                              ),
-                              Icon(
-                                Icons.chevron_left_rounded,
-                                color: NexoraColors.textMuted,
-                                size: 20.r,
-                              ),
-                              SizedBox(width: 2.w),
-                              Text(
-                                'Slide to cancel',
-                                style: TextStyle(
-                                  color: NexoraColors.textMuted,
-                                  fontSize: 14.sp,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    SizedBox(height: 4.h),
+                    Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: NexoraColors.primaryPurple,
+                      size: 20.r,
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
 
-              SizedBox(width: 12.w),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  NexoraColors.midnightDark.withOpacity(0.95),
+                  NexoraColors.midnightDark,
+                ],
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 20.r,
+                  offset: Offset(0, -5.h),
+                ),
+              ],
+              border: Border(
+                top: BorderSide(
+                  color: NexoraColors.primaryPurple.withOpacity(0.2),
+                ),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  // Cancel button
+                  GestureDetector(
+                    onTap: () => _stopRecording(send: false),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 48.r,
+                      height: 48.r,
+                      decoration: BoxDecoration(
+                        color: (slideProgress > 0.3 || _isRecordingLocked)
+                            ? NexoraColors.error.withOpacity(0.15)
+                            : Colors.white.withOpacity(0.05),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: (slideProgress > 0.3 || _isRecordingLocked)
+                              ? NexoraColors.error.withOpacity(0.4)
+                              : Colors.white.withOpacity(0.1),
+                        ),
+                      ),
+                      child: Icon(
+                        (slideProgress > 0.3 || _isRecordingLocked)
+                            ? Icons.delete_rounded
+                            : Icons.close_rounded,
+                        color: (slideProgress > 0.3 || _isRecordingLocked)
+                            ? NexoraColors.error
+                            : Colors.white70,
+                        size: 24.r,
+                      ),
+                    ),
+                  ),
 
-              // Mic button (recording active)
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return AnimatedScale(
-                    scale: isNearCancel ? 0.8 : 1.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: AnimatedOpacity(
-                      opacity: isNearCancel ? 0.5 : 1.0,
-                      duration: const Duration(milliseconds: 150),
-                      child: Container(
-                        width: (48 + (_pulseAnimation.value * 4)).r,
-                        height: (48 + (_pulseAnimation.value * 4)).r,
-                        decoration: BoxDecoration(
-                          gradient: isNearCancel
-                              ? LinearGradient(
-                                  colors: [
-                                    NexoraColors.error.withOpacity(0.8),
-                                    NexoraColors.error.withOpacity(0.6),
-                                  ],
-                                )
-                              : NexoraGradients.romanticGlow,
-                          borderRadius: BorderRadius.circular(
-                            (24 + (_pulseAnimation.value * 2)).r,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (isNearCancel
-                                          ? NexoraColors.error
-                                          : NexoraColors.romanticPink)
-                                      .withOpacity(
-                                        0.3 + (_pulseAnimation.value * 0.2),
-                                      ),
-                              blurRadius: (12 + (_pulseAnimation.value * 4)).r,
-                              offset: Offset(0, 2.h),
+                  SizedBox(width: 12.w),
+
+                  // Recording Info
+                  Expanded(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 100),
+                      transform: Matrix4.translationValues(_slideOffset, 0, 0),
+                      child: Row(
+                        children: [
+                          // Recording dot
+                          _buildRecordingDot(),
+                          SizedBox(width: 10.w),
+
+                          // Timer
+                          Text(
+                            _formatDuration(_recordingDuration),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Icon(
-                          isNearCancel
-                              ? Icons.close_rounded
-                              : Icons.mic_rounded,
-                          color: Colors.white,
-                          size: 24.r,
-                        ),
+                          ),
+
+                          const Spacer(),
+
+                          if (!_isRecordingLocked)
+                            _buildSlideToCancel(slideProgress)
+                          else
+                            _buildLockedIndicator(),
+                        ],
                       ),
                     ),
-                  );
-                },
+                  ),
+
+                  SizedBox(width: 12.w),
+
+                  // Main Button
+                  _buildMainRecordingButton(isNearCancel),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordingDot() {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        return Container(
+          width: 12.r,
+          height: 12.r,
+          decoration: BoxDecoration(
+            color: NexoraColors.error.withOpacity(
+              0.6 + (_pulseAnimation.value * 0.4),
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: NexoraColors.error.withOpacity(
+                  0.4 * _pulseAnimation.value,
+                ),
+                blurRadius: 8.r,
+                spreadRadius: 2.r,
               ),
             ],
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSlideToCancel(double slideProgress) {
+    return AnimatedOpacity(
+      opacity: (1.0 - slideProgress * 1.5).clamp(0.0, 1.0),
+      duration: const Duration(milliseconds: 100),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (context, child) {
+              return Transform.translate(
+                offset: Offset(-5.w * _pulseAnimation.value, 0),
+                child: Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white.withOpacity(0.5),
+                  size: 14.r,
+                ),
+              );
+            },
+          ),
+          SizedBox(width: 4.w),
+          Text(
+            'Slide to cancel',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 14.sp,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildLockedIndicator() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.lock_rounded, color: NexoraColors.primaryPurple, size: 16.r),
+        SizedBox(width: 6.w),
+        Text(
+          "Recording Locked",
+          style: TextStyle(
+            color: NexoraColors.primaryPurple,
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMainRecordingButton(bool isNearCancel) {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        final scale = isNearCancel
+            ? 0.85
+            : (1.0 + (_pulseAnimation.value * 0.05));
+        return Transform.translate(
+          offset: Offset(
+            0,
+            (!_isRecordingLocked && _slideOffset == 0)
+                ? _verticalSlideOffset.clamp(_lockThreshold, 0.0)
+                : 0,
+          ),
+          child: Transform.scale(
+            scale: scale,
+            child: GestureDetector(
+              onTap: _isRecordingLocked ? () => _stopRecording() : null,
+              child: Container(
+                width: 56.r,
+                height: 56.r,
+                decoration: BoxDecoration(
+                  gradient: isNearCancel
+                      ? const LinearGradient(
+                          colors: [NexoraColors.error, NexoraColors.error],
+                        )
+                      : NexoraGradients.primaryButton,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          (isNearCancel
+                                  ? NexoraColors.error
+                                  : NexoraColors.primaryPurple)
+                              .withOpacity(0.4),
+                      blurRadius: 15.r,
+                      spreadRadius: 2.r,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _isRecordingLocked ? Icons.send_rounded : Icons.mic_rounded,
+                  color: Colors.white,
+                  size: 28.r,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1592,7 +1784,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                                   fontSize: 10.sp,
                                 ),
                               ),
-                              if (isSender) _buildStatusIcon(message.isRead),
+                              if (isSender) _buildStatusIcon(message),
                             ],
                           ),
                         ],
@@ -1738,6 +1930,39 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   Widget _buildImageMessage(MessageModel message) {
+    final bool isDownloaded = MediaController.instance.isDownloaded(message.id);
+
+    if (!isDownloaded) {
+      return GestureDetector(
+        onTap: () => setState(
+          () => MediaController.instance.markAsDownloaded(
+            message.id,
+            message.mediaUrl ?? '',
+          ),
+        ),
+        child: Container(
+          width: 200.w,
+          height: 150.h,
+          decoration: BoxDecoration(
+            color: NexoraColors.glassBackground,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: NexoraColors.glassBorder),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.download_rounded, color: Colors.white70, size: 30.r),
+              SizedBox(height: 8.h),
+              Text(
+                "Tap to load image",
+                style: TextStyle(color: Colors.white70, fontSize: 12.sp),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () {
         if (message.mediaUrl != null) {
@@ -1804,7 +2029,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _buildAudioMessage(MessageModel message) {
     final isSender = message.senderId == _chatRepo.currentUserId;
-    final isPlaying =
+    final bool isDownloaded = MediaController.instance.isDownloaded(message.id);
+    final String? localPath = MediaController.instance.getLocalPath(message.id);
+    final bool isPlaying =
         _currentlyPlayingId == message.id &&
         _playerState == PlayerState.playing;
 
@@ -1840,243 +2067,308 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ],
           ),
         ),
-        Container(
-          constraints: BoxConstraints(minWidth: 180.w, maxWidth: 220.w),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Avatar with Play overlay (WhatsApp style)
-              GestureDetector(
-                onTap: () async {
-                  if (message.mediaUrl == null) return;
+        Obx(() {
+          final isDownloading = _downloadingIds.contains(message.id);
 
-                  if (isPlaying) {
-                    await _audioPlayer.pause();
-                    setState(() => _playerState = PlayerState.paused);
-                  } else {
-                    if (_currentlyPlayingId == message.id) {
-                      await _audioPlayer.resume();
-                    } else {
-                      await _audioPlayer.stop();
-                      await _audioPlayer.play(UrlSource(message.mediaUrl!));
-                      _currentlyPlayingId = message.id;
+          return Container(
+            constraints: BoxConstraints(minWidth: 180.w, maxWidth: 220.w),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Avatar with Play/Download overlay (WhatsApp style)
+                GestureDetector(
+                  onTap: () async {
+                    if (message.mediaUrl == null || isDownloading) return;
+
+                    if (!isDownloaded) {
+                      _downloadAudio(message);
+                      return;
                     }
-                    setState(() => _playerState = PlayerState.playing);
 
-                    _audioPlayer.onPlayerComplete.listen((event) {
-                      if (mounted) {
-                        setState(() {
-                          _playerState = PlayerState.stopped;
-                          _currentlyPlayingId = null;
-                        });
+                    if (isPlaying) {
+                      await _audioPlayer.pause();
+                      setState(() => _playerState = PlayerState.paused);
+                    } else {
+                      if (_currentlyPlayingId == message.id) {
+                        await _audioPlayer.resume();
+                      } else {
+                        await _audioPlayer.stop();
+                        final source =
+                            (localPath != null &&
+                                await File(localPath).exists())
+                            ? DeviceFileSource(localPath)
+                            : UrlSource(message.mediaUrl!);
+                        await _audioPlayer.play(source);
+                        _currentlyPlayingId = message.id;
                       }
-                    });
-                  }
-                },
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Avatar background
-                    Container(
-                      width: 36.r,
-                      height: 36.r,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: isSender
-                            ? LinearGradient(
-                                colors: [
-                                  Colors.white.withOpacity(0.25),
-                                  Colors.white.withOpacity(0.1),
-                                ],
-                              )
-                            : NexoraGradients.primaryButton,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                (isSender
-                                        ? Colors.black
-                                        : NexoraColors.primaryPurple)
-                                    .withOpacity(0.2),
-                            blurRadius: 6.r,
-                            offset: Offset(0, 2.h),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: isSender
-                            ? Center(
-                                child: Text(
-                                  'You',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
-                                    fontSize: 9.sp,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              )
-                            : Image.network(
-                                widget.avatar,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Center(
+                      setState(() => _playerState = PlayerState.playing);
+
+                      _audioPlayer.onPlayerComplete.listen((event) {
+                        if (mounted) {
+                          setState(() {
+                            _playerState = PlayerState.stopped;
+                            _currentlyPlayingId = null;
+                          });
+                        }
+                      });
+                    }
+                  },
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Avatar background
+                      Container(
+                        width: 36.r,
+                        height: 36.r,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: isSender
+                              ? LinearGradient(
+                                  colors: [
+                                    Colors.white.withOpacity(0.25),
+                                    Colors.white.withOpacity(0.1),
+                                  ],
+                                )
+                              : NexoraGradients.primaryButton,
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  (isSender
+                                          ? Colors.black
+                                          : NexoraColors.primaryPurple)
+                                      .withOpacity(0.2),
+                              blurRadius: 6.r,
+                              offset: Offset(0, 2.h),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: isSender
+                              ? Center(
                                   child: Text(
-                                    widget.name[0].toUpperCase(),
+                                    'You',
                                     style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12.sp,
-                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 9.sp,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                )
+                              : Image.network(
+                                  widget.avatar,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Center(
+                                    child: Text(
+                                      widget.name[0].toUpperCase(),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12.sp,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ),
+                        ),
+                      ),
+                      // Play/Download/Loading button overlay
+                      Container(
+                        width: 28.r,
+                        height: 28.r,
+                        decoration: BoxDecoration(
+                          gradient: isPlaying
+                              ? NexoraGradients.romanticGlow
+                              : (isSender
+                                    ? NexoraGradients.primaryButton
+                                    : null),
+                          color: !isSender && !isPlaying
+                              ? NexoraColors.romanticPink
+                              : null,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  (isPlaying
+                                          ? NexoraColors.romanticPink
+                                          : Colors.black)
+                                      .withOpacity(0.3),
+                              blurRadius: 8.r,
+                              spreadRadius: 1.r,
+                            ),
+                          ],
+                        ),
+                        child: isDownloading
+                            ? Center(
+                                child: SizedBox(
+                                  width: 14.r,
+                                  height: 14.r,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.r,
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                !isDownloaded
+                                    ? Icons.download_rounded
+                                    : (isPlaying
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded),
+                                color: Colors.white,
+                                size: 18.r,
                               ),
                       ),
-                    ),
-                    // Play button overlay
-                    Container(
-                      width: 28.r,
-                      height: 28.r,
-                      decoration: BoxDecoration(
-                        gradient: isPlaying
-                            ? NexoraGradients.romanticGlow
-                            : (isSender ? NexoraGradients.primaryButton : null),
-                        color: !isSender && !isPlaying
-                            ? NexoraColors.romanticPink
-                            : null,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                (isPlaying
-                                        ? NexoraColors.romanticPink
-                                        : Colors.black)
-                                    .withOpacity(0.3),
-                            blurRadius: 8.r,
-                            spreadRadius: 1.r,
+                    ],
+                  ),
+                ),
+                SizedBox(width: 12.w),
+
+                // Waveform and duration
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Waveform visualization
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(28, (index) {
+                          final heights = [
+                            8,
+                            14,
+                            10,
+                            18,
+                            12,
+                            20,
+                            8,
+                            16,
+                            10,
+                            14,
+                            22,
+                            12,
+                            18,
+                            11,
+                            8,
+                            14,
+                            20,
+                            10,
+                            16,
+                            10,
+                            14,
+                            22,
+                            12,
+                            18,
+                            11,
+                            8,
+                            14,
+                            10,
+                          ];
+                          final height = heights[index % heights.length]
+                              .toDouble();
+
+                          return AnimatedBuilder(
+                            animation: _pulseAnimation,
+                            builder: (context, child) {
+                              // Animate height slightly if playing to give a "live" feel
+                              final dynamicHeight = isPlaying
+                                  ? height +
+                                        (4 *
+                                            (index % 2 == 0
+                                                ? _pulseAnimation.value
+                                                : (1 - _pulseAnimation.value)))
+                                  : height;
+
+                              return Container(
+                                width: 2.5.w,
+                                height: dynamicHeight.h,
+                                margin: EdgeInsets.only(right: 1.w),
+                                decoration: BoxDecoration(
+                                  color: isPlaying
+                                      ? (isSender
+                                            ? Colors.white
+                                            : NexoraColors.accentCyan)
+                                      : (isSender
+                                            ? Colors.white.withOpacity(0.3)
+                                            : NexoraColors.textMuted
+                                                  .withOpacity(0.3)),
+                                  borderRadius: BorderRadius.circular(2.r),
+                                  boxShadow: isPlaying
+                                      ? [
+                                          BoxShadow(
+                                            color:
+                                                (isSender
+                                                        ? Colors.white
+                                                        : NexoraColors
+                                                              .accentCyan)
+                                                    .withOpacity(0.3),
+                                            blurRadius: 4.r,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                              );
+                            },
+                          );
+                        }),
+                      ),
+                      SizedBox(height: 6.h),
+
+                      // Duration row
+                      Row(
+                        children: [
+                          // Duration
+                          Text(
+                            !isDownloaded && !isDownloading
+                                ? "Tap to download"
+                                : _formatDuration(message.duration ?? 0),
+                            style: TextStyle(
+                              color: isSender
+                                  ? Colors.white.withOpacity(0.8)
+                                  : NexoraColors.textMuted,
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.w500,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          // Mic icon indicator
+                          Icon(
+                            Icons.mic_rounded,
+                            size: 14.r,
+                            color: isSender
+                                ? Colors.white.withOpacity(0.6)
+                                : NexoraColors.accentCyan,
                           ),
                         ],
                       ),
-                      child: Icon(
-                        isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: Colors.white,
-                        size: 18.r,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(width: 12.w),
-
-              // Waveform and duration
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Waveform visualization
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: List.generate(28, (index) {
-                        final heights = [
-                          8,
-                          14,
-                          10,
-                          18,
-                          12,
-                          20,
-                          8,
-                          16,
-                          10,
-                          14,
-                          22,
-                          12,
-                          18,
-                          11,
-                          8,
-                          14,
-                          20,
-                          10,
-                          16,
-                        ];
-                        final height = heights[index % heights.length]
-                            .toDouble();
-
-                        return Container(
-                          width: 2.w,
-                          height: height.h,
-                          margin: EdgeInsets.only(right: 1.2.w),
-                          decoration: BoxDecoration(
-                            color: isPlaying
-                                ? (isSender
-                                      ? Colors.white
-                                      : NexoraColors.accentCyan)
-                                : (isSender
-                                      ? Colors.white.withOpacity(0.3)
-                                      : NexoraColors.textMuted.withOpacity(
-                                          0.3,
-                                        )),
-                            borderRadius: BorderRadius.circular(2.r),
-                            boxShadow: isPlaying
-                                ? [
-                                    BoxShadow(
-                                      color:
-                                          (isSender
-                                                  ? Colors.white
-                                                  : NexoraColors.accentCyan)
-                                              .withOpacity(0.3),
-                                      blurRadius: 4.r,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                        );
-                      }),
-                    ),
-                    SizedBox(height: 6.h),
-
-                    // Duration row
-                    Row(
-                      children: [
-                        // Duration
-                        Text(
-                          _formatDuration(message.duration ?? 0),
-                          style: TextStyle(
-                            color: isSender
-                                ? Colors.white.withOpacity(0.8)
-                                : NexoraColors.textMuted,
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w500,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                        const Spacer(),
-                        // Mic icon indicator
-                        Icon(
-                          Icons.mic_rounded,
-                          size: 14.r,
-                          color: isSender
-                              ? Colors.white.withOpacity(0.6)
-                              : NexoraColors.textMuted,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
 
-  Widget _buildStatusIcon(bool isRead) {
+  Widget _buildStatusIcon(MessageModel message) {
+    IconData icon = Icons.done_rounded;
+    Color color = Colors.white.withOpacity(0.6);
+
+    if (message.isRead) {
+      icon = Icons.done_all_rounded;
+      color = NexoraColors.accentCyan;
+    } else if (message.isDelivered) {
+      icon = Icons.done_all_rounded;
+    }
+
     return Padding(
       padding: EdgeInsets.only(left: 4.w),
-      child: Icon(
-        isRead ? Icons.done_all_rounded : Icons.done_rounded,
-        size: 14.r,
-        color: isRead ? NexoraColors.accentCyan : Colors.white.withOpacity(0.6),
-      ),
+      child: Icon(icon, size: 14.r, color: color),
     );
   }
 

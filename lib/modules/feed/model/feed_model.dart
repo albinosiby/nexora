@@ -12,13 +12,16 @@ class PostModel {
   final int likes;
   final int comments;
   final int shares;
-  final bool liked;
-  final bool saved;
+  final List<String> likedBy; // New: track users who liked
+  final List<String> savedBy; // New: track users who saved
   final List<String> images;
   final List<String> hashtags;
   final List<CommentModel> commentsList;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final PollModel? poll;
+  final String? feeling;
+  final String visibility; // New: Public, Campus, Friends
 
   PostModel({
     required this.id,
@@ -31,14 +34,20 @@ class PostModel {
     required this.likes,
     required this.comments,
     required this.shares,
-    required this.liked,
-    required this.saved,
+    this.likedBy = const [],
+    this.savedBy = const [],
     required this.images,
     required this.hashtags,
     required this.commentsList,
     required this.createdAt,
     this.updatedAt,
+    this.poll,
+    this.feeling,
+    this.visibility = 'Public',
   });
+
+  bool isLikedBy(String userId) => likedBy.contains(userId);
+  bool isSavedBy(String userId) => savedBy.contains(userId);
 
   String get displayName => username.isNotEmpty
       ? username
@@ -63,8 +72,8 @@ class PostModel {
       likes: json['likes'] ?? 0,
       comments: json['comments'] ?? 0,
       shares: json['shares'] ?? 0,
-      liked: json['liked'] ?? false,
-      saved: json['saved'] ?? false,
+      likedBy: List<String>.from(json['likedBy'] ?? []),
+      savedBy: List<String>.from(json['savedBy'] ?? []),
       images: List<String>.from(json['images'] ?? []),
       hashtags: List<String>.from(json['hashtags'] ?? []),
       commentsList: (json['comments_list'] as List? ?? [])
@@ -74,6 +83,9 @@ class PostModel {
       updatedAt: json['updatedAt'] != null
           ? _parseDate(json['updatedAt'])
           : null,
+      poll: json['poll'] != null ? PollModel.fromJson(json['poll']) : null,
+      feeling: json['feeling'],
+      visibility: json['visibility'] ?? 'Public',
     );
   }
 
@@ -95,13 +107,16 @@ class PostModel {
       'likes': likes,
       'comments': comments,
       'shares': shares,
-      'liked': liked,
-      'saved': saved,
+      'likedBy': likedBy,
+      'savedBy': savedBy,
       'images': images,
       'hashtags': hashtags,
       'comments_list': commentsList.map((c) => c.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'poll': poll?.toJson(),
+      'feeling': feeling,
+      'visibility': visibility,
     };
   }
 
@@ -116,13 +131,16 @@ class PostModel {
     int? likes,
     int? comments,
     int? shares,
-    bool? liked,
-    bool? saved,
+    List<String>? likedBy,
+    List<String>? savedBy,
     List<String>? images,
     List<String>? hashtags,
     List<CommentModel>? commentsList,
     DateTime? createdAt,
     DateTime? updatedAt,
+    PollModel? poll,
+    String? feeling,
+    String? visibility,
   }) {
     return PostModel(
       id: id ?? this.id,
@@ -135,14 +153,51 @@ class PostModel {
       likes: likes ?? this.likes,
       comments: comments ?? this.comments,
       shares: shares ?? this.shares,
-      liked: liked ?? this.liked,
-      saved: saved ?? this.saved,
+      likedBy: likedBy ?? this.likedBy,
+      savedBy: savedBy ?? this.savedBy,
       images: images ?? this.images,
       hashtags: hashtags ?? this.hashtags,
       commentsList: commentsList ?? this.commentsList,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      poll: poll ?? this.poll,
+      feeling: feeling ?? this.feeling,
+      visibility: visibility ?? this.visibility,
     );
+  }
+}
+
+class PollModel {
+  final String question;
+  final List<String> options;
+  final List<int> votes;
+  final Map<String, int> votedBy; // New: userId -> optionIndex
+
+  PollModel({
+    required this.question,
+    required this.options,
+    required this.votes,
+    this.votedBy = const {},
+  });
+
+  int? userVote(String userId) => votedBy[userId];
+
+  factory PollModel.fromJson(Map<String, dynamic> json) {
+    return PollModel(
+      question: json['question'] ?? '',
+      options: List<String>.from(json['options'] ?? []),
+      votes: List<int>.from(json['votes'] ?? []),
+      votedBy: Map<String, int>.from(json['votedBy'] ?? {}),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'question': question,
+      'options': options,
+      'votes': votes,
+      'votedBy': votedBy,
+    };
   }
 }
 

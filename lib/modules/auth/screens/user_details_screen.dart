@@ -69,7 +69,9 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
               surface: NexoraColors.cardBackground,
               onSurface: NexoraColors.textPrimary,
             ),
-            dialogBackgroundColor: NexoraColors.cardBackground,
+            dialogTheme: DialogThemeData(
+              backgroundColor: NexoraColors.cardBackground,
+            ),
           ),
           child: child!,
         );
@@ -591,7 +593,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                                     _isVjecStudent = value;
                                   });
                                 },
-                                activeColor: NexoraColors.primaryPurple,
+                                activeThumbColor: NexoraColors.primaryPurple,
                                 activeTrackColor: NexoraColors.primaryPurple
                                     .withOpacity(0.4),
                                 inactiveThumbColor: NexoraColors.textMuted,

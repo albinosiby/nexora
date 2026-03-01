@@ -530,9 +530,7 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
                     String? chatId = await _chatRepo.findExistingChat(
                       connection.userId,
                     );
-                    if (chatId == null) {
-                      chatId = await _chatRepo.createChat(connection.userId);
-                    }
+                    chatId ??= await _chatRepo.createChat(connection.userId);
                     Get.to(
                       () => ChatDetailScreen(
                         name: connection.name,

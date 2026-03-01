@@ -26,11 +26,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   ProfileModel get profile => _userRepo.currentUser;
 
+  // These will now be reactive through Obx
   String get userName => profile.name;
   String get userDisplayName => profile.displayName;
   String get userBio => profile.bio;
   String get userYear => profile.year;
   String get userMajor => profile.major;
+  String get avatarUrl => profile.avatar;
 
   // Spotify anthem from repository
   Map<String, String> get spotifyAnthem => {
@@ -39,10 +41,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     'albumArt':
         'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
   };
-
-  // Avatar customization options
-  String avatarSeed = '';
-  String avatarStyle = 'avataaars';
 
   late AnimationController _animController;
 
@@ -104,7 +102,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _loadUserData();
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -117,24 +114,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
-    setState(() {
-      avatarSeed = profile.avatarSeed;
-      avatarStyle = profile.avatarStyle;
-    });
-  }
-
-  Future<void> _saveAvatarPreferences() async {
+  Future<void> _saveAvatarPreferences(String seed, String style) async {
     final updatedProfile = profile.copyWith(
-      avatarSeed: avatarSeed,
-      avatarStyle: avatarStyle,
+      avatarSeed: seed,
+      avatarStyle: style,
+      // The avatar URL is generated from these and should be updated in the profile
+      avatar:
+          'https://api.dicebear.com/7.x/$style/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=transparent&size=200',
     );
     await _userRepo.updateProfile(updatedProfile);
-  }
-
-  String get avatarUrl {
-    // Using PNG format for better compatibility
-    return 'https://api.dicebear.com/7.x/$avatarStyle/png?seed=${Uri.encodeComponent(avatarSeed)}&backgroundColor=transparent&size=200';
   }
 
   Future<void> _logout() async {
@@ -201,9 +189,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _showAvatarEditor() {
-    // Temporary state for preview
-    String tempSeed = avatarSeed;
-    String tempStyle = avatarStyle;
+    // Temporary state for preview, initialized from current profile
+    String tempSeed = profile.avatarSeed;
+    String tempStyle = profile.avatarStyle;
 
     showModalBottomSheet(
       context: context,
@@ -272,11 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                       TextButton(
                         onPressed: () {
-                          setState(() {
-                            avatarSeed = tempSeed;
-                            avatarStyle = tempStyle;
-                          });
-                          _saveAvatarPreferences();
+                          _saveAvatarPreferences(tempSeed, tempStyle);
                           Navigator.pop(context);
                         },
                         child: ShaderMask(
@@ -592,8 +576,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         fit: BoxFit.cover,
                                         loadingBuilder:
                                             (context, child, loadingProgress) {
-                                              if (loadingProgress == null)
+                                              if (loadingProgress == null) {
                                                 return child;
+                                              }
                                               return Center(
                                                 child: Text(
                                                   userName[0].toUpperCase(),
@@ -1434,8 +1419,9 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     if (majorController.text.isNotEmpty) completed++;
     if (selectedInterests.length >= 3) completed++;
     if (instagramController.text.isNotEmpty ||
-        spotifyController.text.isNotEmpty)
+        spotifyController.text.isNotEmpty) {
       completed++;
+    }
 
     return completed / total;
   }

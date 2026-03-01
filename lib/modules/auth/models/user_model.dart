@@ -12,7 +12,7 @@ class UserModel {
   final List<String> interests;
   final int age;
   final bool isOnline;
-  final int followers;
+  final int connections;
   final int following;
   final int posts;
   final String? instagram;
@@ -43,7 +43,7 @@ class UserModel {
     this.interests = const [],
     this.age = 18,
     this.isOnline = false,
-    this.followers = 0,
+    this.connections = 0,
     this.following = 0,
     this.posts = 0,
     this.instagram,
@@ -79,7 +79,7 @@ class UserModel {
       interests: List<String>.from(json['interests'] ?? []),
       age: json['age'] ?? 18,
       isOnline: json['isOnline'] ?? false,
-      followers: json['followers'] ?? 0,
+      connections: json['connections'] ?? json['followers'] ?? 0,
       following: json['following'] ?? 0,
       posts: json['posts'] ?? 0,
       instagram: json['instagram'],
@@ -100,6 +100,7 @@ class UserModel {
                 ? DateTime.parse(json['lastActive'])
                 : (json['lastActive'] as dynamic).toDate())
           : null,
+      fcmToken: json['fcmToken'],
       pushNotifications: json['pushNotifications'] ?? true,
       messageNotifications: json['messageNotifications'] ?? true,
       feedNotifications: json['feedNotifications'] ?? true,
@@ -120,7 +121,7 @@ class UserModel {
       'interests': interests,
       'age': age,
       'isOnline': isOnline,
-      'followers': followers,
+      'connections': connections,
       'following': following,
       'posts': posts,
       'instagram': instagram,
@@ -155,7 +156,7 @@ class UserModel {
       'interests': interests,
       'age': age,
       'isOnline': isOnline,
-      'followers': followers,
+      'connections': connections,
       'following': following,
       'posts': posts,
       'instagram': instagram,
@@ -199,7 +200,7 @@ class UserModel {
     String? major,
     List<String>? interests,
     bool? isOnline,
-    int? followers,
+    int? connections,
     int? following,
     int? age,
     int? posts,
@@ -230,7 +231,7 @@ class UserModel {
       major: major ?? this.major,
       interests: interests ?? this.interests,
       isOnline: isOnline ?? this.isOnline,
-      followers: followers ?? this.followers,
+      connections: connections ?? this.connections,
       following: following ?? this.following,
       age: age ?? this.age,
       posts: posts ?? this.posts,

@@ -11,6 +11,7 @@ class MessageModel {
   final String? mediaUrl;
   final DateTime timestamp;
   final bool isRead;
+  final bool isDelivered;
   final String? reaction;
   final int? duration;
   final String? replyToId;
@@ -26,6 +27,7 @@ class MessageModel {
     this.mediaUrl,
     required this.timestamp,
     this.isRead = false,
+    this.isDelivered = false,
     this.reaction,
     this.duration,
     this.replyToId,
@@ -58,6 +60,7 @@ class MessageModel {
         return DateTime.now();
       }(),
       isRead: json['isRead'] ?? false,
+      isDelivered: json['isDelivered'] ?? false,
       reaction: json['reaction'],
       duration: json['duration'],
       replyToId: json['replyToId'],
@@ -75,11 +78,46 @@ class MessageModel {
       'mediaUrl': mediaUrl,
       'timestamp': ServerValue.timestamp,
       'isRead': isRead,
+      'isDelivered': isDelivered,
       'reaction': reaction,
       'duration': duration,
       if (replyToId != null) 'replyToId': replyToId,
       if (replyToContent != null) 'replyToContent': replyToContent,
       if (replyToSenderId != null) 'replyToSenderId': replyToSenderId,
     };
+  }
+
+  MessageModel copyWith({
+    String? id,
+    String? chatId,
+    String? senderId,
+    String? content,
+    MessageType? type,
+    String? mediaUrl,
+    DateTime? timestamp,
+    bool? isRead,
+    bool? isDelivered,
+    String? reaction,
+    int? duration,
+    String? replyToId,
+    String? replyToContent,
+    String? replyToSenderId,
+  }) {
+    return MessageModel(
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      senderId: senderId ?? this.senderId,
+      content: content ?? this.content,
+      type: type ?? this.type,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      isDelivered: isDelivered ?? this.isDelivered,
+      reaction: reaction ?? this.reaction,
+      duration: duration ?? this.duration,
+      replyToId: replyToId ?? this.replyToId,
+      replyToContent: replyToContent ?? this.replyToContent,
+      replyToSenderId: replyToSenderId ?? this.replyToSenderId,
+    );
   }
 }

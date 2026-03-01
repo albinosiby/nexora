@@ -3,6 +3,8 @@ class ChatModel {
   final List<String> participantIds;
   final String lastMessage;
   final DateTime lastMessageTime;
+  final String? lastMessageSenderId;
+  final String? lastMessageStatus; // 'sent', 'delivered', 'seen'
   final Map<String, int> unreadCounts;
   final Map<String, bool> typingStatus;
 
@@ -11,6 +13,8 @@ class ChatModel {
     required this.participantIds,
     required this.lastMessage,
     required this.lastMessageTime,
+    this.lastMessageSenderId,
+    this.lastMessageStatus,
     this.unreadCounts = const {},
     this.typingStatus = const {},
   });
@@ -23,6 +27,8 @@ class ChatModel {
       lastMessageTime: DateTime.fromMillisecondsSinceEpoch(
         json['lastMessageTime'] ?? 0,
       ),
+      lastMessageSenderId: json['lastMessageSenderId'],
+      lastMessageStatus: json['lastMessageStatus'],
       unreadCounts: Map<String, int>.from(json['unreadCounts'] ?? {}),
       typingStatus: Map<String, bool>.from(json['typingStatus'] ?? {}),
     );
@@ -33,6 +39,8 @@ class ChatModel {
       'participantIds': participantIds,
       'lastMessage': lastMessage,
       'lastMessageTime': lastMessageTime.millisecondsSinceEpoch,
+      'lastMessageSenderId': lastMessageSenderId,
+      'lastMessageStatus': lastMessageStatus,
       'unreadCounts': unreadCounts,
       'typingStatus': typingStatus,
     };

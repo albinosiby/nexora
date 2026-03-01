@@ -3,6 +3,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import '../../modules/auth/repositories/auth_repository.dart';
+import '../../modules/chat/screens/chat_detail_screen.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // If you're going to use other Firebase services in the background, such as Firestore,
+  // make sure you call `Firebase.initializeApp()` first.
+  debugPrint("Handling a background message: ${message.messageId}");
+}
 
 class PushNotificationService extends GetxService {
   static PushNotificationService get instance => Get.find();
@@ -20,6 +28,9 @@ class PushNotificationService extends GetxService {
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       debugPrint('User granted notification permission');
     }
+
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Handle initial message when app is opened from a terminated state
     RemoteMessage? initialMessage = await _fcm.getInitialMessage();
@@ -52,16 +63,30 @@ class PushNotificationService extends GetxService {
   }
 
   void _handleMessage(RemoteMessage message) {
-    // Navigate based on message data
+    if (AuthRepository.instance.user == null) return;
+
     final data = message.data;
     if (data['type'] == 'chat') {
-      // Navigate to chat detail
       final chatId = data['chatId'];
-      if (chatId != null) {
-        // Logic to navigate if needed, but usually handled by user tapping notification
+      final senderId = data['senderId'];
+      final senderName = data['senderName'] ?? "Nexora User";
+      final senderAvatar = data['senderAvatar'] ?? "";
+
+      if (chatId != null && senderId != null) {
+        Get.to(
+          () => ChatDetailScreen(
+            chatId: chatId,
+            participantId: senderId,
+            name: senderName,
+            avatar: senderAvatar,
+          ),
+          preventDuplicates: false,
+        );
       }
     } else if (data['type'] == 'connection') {
-      // Navigate to connections screen
+      // In a real app, you might want to find the ConnectionsScreen in the stack or use a specific route
+      // For now, let's just go to the screen
+      // Get.to(() => const ConnectionsScreen());
     }
   }
 }

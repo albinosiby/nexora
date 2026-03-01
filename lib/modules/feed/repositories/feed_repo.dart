@@ -2,20 +2,25 @@
 import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../model/feed_model.dart';
+import '../../notifications/repositories/notification_repository.dart';
+import '../../notifications/models/notification_model.dart';
+import '../../chat/repositories/chat_repository.dart';
 
 abstract class IPostRepository {
+  Stream<List<PostModel>> getPostsStream({int limit = 50});
   Future<List<PostModel>> getPosts({int page = 1, int limit = 10});
   Future<PostModel> getPostById(String id);
   Future<List<PostModel>> searchPosts(String query);
   Future<PostModel> createPost(PostModel post);
   Future<PostModel> updatePost(PostModel post);
   Future<void> deletePost(String id);
-  Future<PostModel> toggleLike(String postId, String userId);
-  Future<PostModel> toggleSave(String postId, String userId);
+  Future<void> toggleLike(String postId, String userId);
+  Future<void> toggleSave(String postId, String userId);
   Future<CommentModel> addComment(String postId, CommentModel comment);
   Future<void> deleteComment(String postId, String commentId);
   Future<List<PostModel>> getPostsByUser(String userId);
   Future<List<String>> getTrendingHashtags();
+  Future<void> voteInPoll(String postId, int optionIndex, String userId);
 }
 
 class PostRepository extends GetxService implements IPostRepository {
@@ -28,6 +33,19 @@ class PostRepository extends GetxService implements IPostRepository {
   void onInit() {
     super.onInit();
     _postsCollection = _firestore.collection('feed');
+  }
+
+  @override
+  Stream<List<PostModel>> getPostsStream({int limit = 50}) {
+    return _postsCollection
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => PostModel.fromFirestore(doc))
+              .toList();
+        });
   }
 
   @override
@@ -91,39 +109,60 @@ class PostRepository extends GetxService implements IPostRepository {
   }
 
   @override
-  Future<PostModel> toggleLike(String postId, String userId) async {
-    // Optimization: In a real app, likes should be in a subcollection or use a separate tracking field.
-    // For this simple implementation, we'll fetch, update, and return.
+  Future<void> toggleLike(String postId, String userId) async {
     final doc = await _postsCollection.doc(postId).get();
     if (!doc.exists) throw Exception('Post not found');
 
     final post = PostModel.fromFirestore(doc);
-    final wasLiked = post.liked;
+    final isLiked = post.likedBy.contains(userId);
 
-    final updatedPost = post.copyWith(
-      liked: !wasLiked,
-      likes: wasLiked ? post.likes - 1 : post.likes + 1,
-    );
+    if (isLiked) {
+      // Unlike
+      await _postsCollection.doc(postId).update({
+        'likedBy': FieldValue.arrayRemove([userId]),
+        'likes': FieldValue.increment(-1),
+      });
+    } else {
+      // Like
+      await _postsCollection.doc(postId).update({
+        'likedBy': FieldValue.arrayUnion([userId]),
+        'likes': FieldValue.increment(1),
+      });
 
-    await _postsCollection.doc(postId).update({
-      'liked': updatedPost.liked,
-      'likes': updatedPost.likes,
-    });
-
-    return updatedPost;
+      // Send notification to post owner
+      if (post.userId != userId) {
+        final notification = NotificationModel(
+          id: '',
+          type: NotificationType.like,
+          userId: userId,
+          userName:
+              'Someone', // Or fetch user name if needed, but for now 'Someone' is safer or fetch from another source
+          message: 'liked your post',
+          timestamp: DateTime.now(),
+          targetId: postId,
+        );
+        NotificationRepository().addNotification(notification, post.userId);
+      }
+    }
   }
 
   @override
-  Future<PostModel> toggleSave(String postId, String userId) async {
+  Future<void> toggleSave(String postId, String userId) async {
     final doc = await _postsCollection.doc(postId).get();
     if (!doc.exists) throw Exception('Post not found');
 
     final post = PostModel.fromFirestore(doc);
-    final updatedPost = post.copyWith(saved: !post.saved);
+    final isSaved = post.savedBy.contains(userId);
 
-    await _postsCollection.doc(postId).update({'saved': updatedPost.saved});
-
-    return updatedPost;
+    if (isSaved) {
+      await _postsCollection.doc(postId).update({
+        'savedBy': FieldValue.arrayRemove([userId]),
+      });
+    } else {
+      await _postsCollection.doc(postId).update({
+        'savedBy': FieldValue.arrayUnion([userId]),
+      });
+    }
   }
 
   @override
@@ -137,6 +176,25 @@ class PostRepository extends GetxService implements IPostRepository {
       'comments_list': FieldValue.arrayUnion([newComment.toJson()]),
       'comments': FieldValue.increment(1),
     });
+
+    // Send notification to post owner
+    final doc = await _postsCollection.doc(postId).get();
+    if (doc.exists) {
+      final post = PostModel.fromFirestore(doc);
+      if (post.userId != comment.userId) {
+        final notification = NotificationModel(
+          id: '',
+          type: NotificationType.comment,
+          userId: comment.userId,
+          userName: comment.displayName,
+          userAvatar: comment.avatar,
+          message: 'commented: ${comment.comment}',
+          timestamp: DateTime.now(),
+          targetId: postId,
+        );
+        NotificationRepository().addNotification(notification, post.userId);
+      }
+    }
 
     return newComment;
   }
@@ -186,5 +244,32 @@ class PostRepository extends GetxService implements IPostRepository {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return sortedHashtags.take(10).map((e) => e.key).toList();
+  }
+
+  @override
+  Future<void> voteInPoll(String postId, int optionIndex, String userId) async {
+    await _firestore.runTransaction((transaction) async {
+      final postDoc = await transaction.get(_postsCollection.doc(postId));
+      if (!postDoc.exists) throw Exception('Post not found');
+
+      final post = PostModel.fromFirestore(postDoc);
+      final poll = post.poll;
+      if (poll == null) throw Exception('Post has no poll');
+
+      if (poll.votedBy.containsKey(userId)) {
+        throw Exception('User has already voted');
+      }
+
+      final updatedVotes = List<int>.from(poll.votes);
+      updatedVotes[optionIndex]++;
+
+      final updatedVotedBy = Map<String, int>.from(poll.votedBy);
+      updatedVotedBy[userId] = optionIndex;
+
+      transaction.update(_postsCollection.doc(postId), {
+        'poll.votes': updatedVotes,
+        'poll.votedBy': updatedVotedBy,
+      });
+    });
   }
 }

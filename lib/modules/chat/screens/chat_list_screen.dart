@@ -400,12 +400,21 @@ class _ChatListScreenState extends State<ChatListScreen>
                       ),
                       child: Row(
                         children: [
-                          _buildAvatar(
-                            avatar,
-                            name,
-                            isOnline,
-                            hasUnread,
-                            otherUser,
+                          StreamBuilder<bool>(
+                            stream: _userRepo.getUserPresenceStream(
+                              otherUserId,
+                            ),
+                            builder: (context, presenceSnapshot) {
+                              final currentOnlineStatus =
+                                  presenceSnapshot.data ?? isOnline;
+                              return _buildAvatar(
+                                avatar,
+                                name,
+                                currentOnlineStatus,
+                                hasUnread,
+                                otherUser,
+                              );
+                            },
                           ),
                           SizedBox(width: 14.w),
                           Expanded(
@@ -417,16 +426,38 @@ class _ChatListScreenState extends State<ChatListScreen>
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Expanded(
-                                      child: Text(
-                                        name,
-                                        style: TextStyle(
-                                          fontWeight: hasUnread
-                                              ? FontWeight.bold
-                                              : FontWeight.w600,
-                                          fontSize: 15.sp,
-                                          color: NexoraColors.textPrimary,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              name,
+                                              style: TextStyle(
+                                                fontWeight: hasUnread
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w600,
+                                                fontSize: 15.sp,
+                                                color: NexoraColors.textPrimary,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (otherUser?.isVerified ==
+                                              true) ...[
+                                            SizedBox(width: 4.w),
+                                            Container(
+                                              padding: EdgeInsets.all(2.r),
+                                              decoration: const BoxDecoration(
+                                                color: NexoraColors.accentCyan,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.check,
+                                                size: 8.r,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                     SizedBox(width: 8.w),
@@ -450,10 +481,10 @@ class _ChatListScreenState extends State<ChatListScreen>
                                     if (!hasUnread &&
                                         !isTyping &&
                                         chat.lastMessage.isNotEmpty) ...[
-                                      Icon(
-                                        Icons.done_all,
-                                        size: 16.r,
-                                        color: NexoraColors.accentCyan,
+                                      _buildListStatusIcon(
+                                        chat.lastMessageSenderId ==
+                                            currentUserId,
+                                        chat.lastMessageStatus,
                                       ),
                                       SizedBox(width: 4.w),
                                     ],
@@ -647,6 +678,25 @@ class _ChatListScreenState extends State<ChatListScreen>
           fontWeight: FontWeight.bold,
         ),
       ),
+    );
+  }
+
+  Widget _buildListStatusIcon(bool isSender, String? status) {
+    if (!isSender || status == null) return const SizedBox.shrink();
+
+    IconData icon = Icons.done_rounded;
+    Color color = NexoraColors.textMuted;
+
+    if (status == 'seen') {
+      icon = Icons.done_all_rounded;
+      color = NexoraColors.accentCyan;
+    } else if (status == 'delivered') {
+      icon = Icons.done_all_rounded;
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(right: 4.w),
+      child: Icon(icon, size: 16.r, color: color),
     );
   }
 
