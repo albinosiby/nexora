@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/dark_background.dart';
 import '../repositories/connection_service.dart';
+import '../widgets/connection_user_card.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 import '../../chat/repositories/chat_repository.dart';
@@ -228,356 +229,141 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
   }
 
   Widget _buildRequestCard(ConnectionRequest request) {
-    return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-      padding: EdgeInsets.all(16.r),
-      decoration: BoxDecoration(
-        color: NexoraColors.glassBackground,
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: NexoraColors.glassBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8.r,
-            offset: Offset(0, 2.h),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          GestureDetector(
-            onTap: () => _navigateToProfile(request),
-            child: Container(
-              width: 56.w,
-              height: 56.w,
-              decoration: BoxDecoration(
-                gradient: NexoraGradients.primaryButton,
-                shape: BoxShape.circle,
-              ),
-              child: ClipOval(
-                child: Image.network(
-                  request.avatar,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Text(
-                      request.name.isNotEmpty
-                          ? request.name[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        fontSize: 22.sp,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+    return ConnectionUserCard(
+      request: request,
+      onTap: () => _navigateToProfile(request),
+      actions: [
+        // Reject
+        GestureDetector(
+          onTap: () {
+            _connectionService.rejectRequest(request.userId);
+            Get.snackbar(
+              'Request Declined',
+              'Connection request from ${request.name} declined',
+              backgroundColor: NexoraColors.glassBackground,
+              colorText: Colors.white,
+              snackPosition: SnackPosition.TOP,
+              duration: const Duration(seconds: 2),
+              margin: EdgeInsets.all(16.r),
+              borderRadius: 12.r,
+            );
+          },
+          child: Container(
+            padding: EdgeInsets.all(10.r),
+            decoration: BoxDecoration(
+              color: NexoraColors.textMuted.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.close_rounded,
+              color: NexoraColors.textMuted,
+              size: 20.r,
             ),
           ),
+        ),
 
-          const SizedBox(width: 12),
+        SizedBox(width: 8.w),
 
-          // Info
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _navigateToProfile(request),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    request.name,
-                    style: TextStyle(
-                      color: NexoraColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16.sp,
-                    ),
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    request.major,
-                    style: TextStyle(
-                      color: NexoraColors.textSecondary,
-                      fontSize: 13.sp,
-                    ),
-                  ),
-                  SizedBox(height: 4.h),
-                  Text(
-                    _formatTimeAgo(request.timestamp),
-                    style: TextStyle(
-                      color: NexoraColors.textMuted,
-                      fontSize: 11.sp,
-                    ),
-                  ),
-                ],
+        // Accept
+        GestureDetector(
+          onTap: () {
+            _connectionService.acceptRequest(request.userId);
+            Get.snackbar(
+              'Connected!',
+              'You are now connected with ${request.name}',
+              backgroundColor: NexoraColors.success.withOpacity(0.9),
+              colorText: Colors.white,
+              snackPosition: SnackPosition.TOP,
+              duration: const Duration(seconds: 2),
+              margin: EdgeInsets.all(16.r),
+              borderRadius: 12.r,
+              icon: Padding(
+                padding: EdgeInsets.only(left: 12.w),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                ),
               ),
+            );
+          },
+          child: Container(
+            padding: EdgeInsets.all(10.r),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [NexoraColors.success, NexoraColors.accentCyan],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: NexoraColors.success.withOpacity(0.4),
+                  blurRadius: 8.r,
+                  offset: Offset(0, 2.h),
+                ),
+              ],
             ),
+            child: Icon(Icons.check_rounded, color: Colors.white, size: 20.r),
           ),
-
-          // Actions
-          Row(
-            children: [
-              // Reject
-              GestureDetector(
-                onTap: () {
-                  _connectionService.rejectRequest(request.userId);
-                  Get.snackbar(
-                    'Request Declined',
-                    'Connection request from ${request.name} declined',
-                    backgroundColor: NexoraColors.glassBackground,
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.TOP,
-                    duration: const Duration(seconds: 2),
-                    margin: EdgeInsets.all(16.r),
-                    borderRadius: 12.r,
-                  );
-                },
-                child: Container(
-                  padding: EdgeInsets.all(10.r),
-                  decoration: BoxDecoration(
-                    color: NexoraColors.textMuted.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.close_rounded,
-                    color: NexoraColors.textMuted,
-                    size: 20.r,
-                  ),
-                ),
-              ),
-
-              SizedBox(width: 8.w),
-
-              // Accept
-              GestureDetector(
-                onTap: () {
-                  _connectionService.acceptRequest(request.userId);
-                  Get.snackbar(
-                    'Connected!',
-                    'You are now connected with ${request.name}',
-                    backgroundColor: NexoraColors.success.withOpacity(0.9),
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.TOP,
-                    duration: const Duration(seconds: 2),
-                    margin: EdgeInsets.all(16.r),
-                    borderRadius: 12.r,
-                    icon: Padding(
-                      padding: EdgeInsets.only(left: 12.w),
-                      child: const Icon(
-                        Icons.check_circle_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: EdgeInsets.all(10.r),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [NexoraColors.success, NexoraColors.accentCyan],
-                    ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: NexoraColors.success.withOpacity(0.4),
-                        blurRadius: 8.r,
-                        offset: Offset(0, 2.h),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 20.r,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildConnectionCard(ConnectionRequest connection) {
-    return GestureDetector(
+    return ConnectionUserCard(
+      request: connection,
       onTap: () => _navigateToProfile(connection),
-      child: Container(
-        margin: EdgeInsets.only(bottom: 12.h),
-        padding: EdgeInsets.all(16.r),
-        decoration: BoxDecoration(
-          color: NexoraColors.glassBackground,
-          borderRadius: BorderRadius.circular(16.r),
-          border: Border.all(color: NexoraColors.glassBorder),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8.r,
-              offset: Offset(0, 2.h),
+      actions: [
+        // Message
+        GestureDetector(
+          onTap: () async {
+            // Always check for existing chat first
+            String? chatId = await _chatRepo.findExistingChat(
+              connection.userId,
+            );
+            chatId ??= await _chatRepo.createChat(connection.userId);
+            Get.to(
+              () => ChatDetailScreen(
+                name: connection.name,
+                avatar: connection.avatar ?? '',
+                chatId: chatId,
+                participantId: connection.userId,
+              ),
+            );
+          },
+          child: Container(
+            padding: EdgeInsets.all(10.r),
+            decoration: BoxDecoration(
+              color: NexoraColors.primaryPurple.withOpacity(0.15),
+              shape: BoxShape.circle,
             ),
-          ],
+            child: Icon(
+              Icons.chat_bubble_rounded,
+              color: NexoraColors.primaryPurple,
+              size: 20.r,
+            ),
+          ),
         ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 56.w,
-              height: 56.w,
-              decoration: BoxDecoration(
-                gradient: NexoraGradients.primaryButton,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: NexoraColors.success.withOpacity(0.5),
-                  width: 2.w,
-                ),
-              ),
-              child: ClipOval(
-                child: Image.network(
-                  connection.avatar,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Text(
-                      connection.name.isNotEmpty
-                          ? connection.name[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        fontSize: 22.sp,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+
+        SizedBox(width: 8.w),
+
+        // More options
+        GestureDetector(
+          onTap: () => _showConnectionOptions(connection),
+          child: Container(
+            padding: EdgeInsets.all(10.r),
+            decoration: BoxDecoration(
+              color: NexoraColors.glassBackground,
+              shape: BoxShape.circle,
+              border: Border.all(color: NexoraColors.glassBorder),
             ),
-
-            const SizedBox(width: 12),
-
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        connection.name,
-                        style: TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16.sp,
-                        ),
-                      ),
-                      SizedBox(width: 6.w),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6.w,
-                          vertical: 2.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: NexoraColors.success.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6.r),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.link_rounded,
-                              size: 10.r,
-                              color: NexoraColors.success,
-                            ),
-                            SizedBox(width: 3.w),
-                            Text(
-                              'Connected',
-                              style: TextStyle(
-                                color: NexoraColors.success,
-                                fontSize: 9.sp,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    connection.major,
-                    style: TextStyle(
-                      color: NexoraColors.textSecondary,
-                      fontSize: 13.sp,
-                    ),
-                  ),
-                  SizedBox(height: 4.h),
-                  Text(
-                    'Connected ${_formatTimeAgo(connection.timestamp)}',
-                    style: TextStyle(
-                      color: NexoraColors.textMuted,
-                      fontSize: 11.sp,
-                    ),
-                  ),
-                ],
-              ),
+            child: Icon(
+              Icons.more_horiz_rounded,
+              color: NexoraColors.textSecondary,
+              size: 20.r,
             ),
-
-            // Actions
-            Row(
-              children: [
-                // Message
-                GestureDetector(
-                  onTap: () async {
-                    // Always check for existing chat first
-                    String? chatId = await _chatRepo.findExistingChat(
-                      connection.userId,
-                    );
-                    chatId ??= await _chatRepo.createChat(connection.userId);
-                    Get.to(
-                      () => ChatDetailScreen(
-                        name: connection.name,
-                        avatar: connection.avatar,
-                        chatId: chatId,
-                        participantId: connection.userId,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(10.r),
-                    decoration: BoxDecoration(
-                      color: NexoraColors.primaryPurple.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.chat_bubble_rounded,
-                      color: NexoraColors.primaryPurple,
-                      size: 20.r,
-                    ),
-                  ),
-                ),
-
-                SizedBox(width: 8.w),
-
-                // More options
-                GestureDetector(
-                  onTap: () => _showConnectionOptions(connection),
-                  child: Container(
-                    padding: EdgeInsets.all(10.r),
-                    decoration: BoxDecoration(
-                      color: NexoraColors.glassBackground,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: NexoraColors.glassBorder),
-                    ),
-                    child: Icon(
-                      Icons.more_horiz_rounded,
-                      color: NexoraColors.textSecondary,
-                      size: 20.r,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -590,14 +376,12 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
           username: request.name,
           email:
               '${request.name.toLowerCase().replaceAll(' ', '.')}@example.com',
-          avatar: request.avatar,
-          major: request.major,
+          avatar: request.avatar ?? '',
+          major: request.major ?? 'Student',
           bio: 'Hey there! I\'m using Nexora 💜',
-          year: '3rd Year',
+          year: request.year ?? '3rd Year',
           interests: const ['Music', 'Tech', 'Coffee', 'Gaming'],
           isOnline: true,
-          spotifyTrackName: 'Espresso',
-          spotifyArtist: 'Sabrina Carpenter',
         ),
       ),
       transition: Transition.rightToLeftWithFade,
@@ -702,22 +486,5 @@ class _ConnectionsScreenState extends State<ConnectionsScreen>
         ),
       ),
     );
-  }
-
-  String _formatTimeAgo(DateTime timestamp) {
-    final now = DateTime.now();
-    final diff = now.difference(timestamp);
-
-    if (diff.inMinutes < 1) {
-      return 'Just now';
-    } else if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
-    } else {
-      return '${(diff.inDays / 7).floor()}w ago';
-    }
   }
 }

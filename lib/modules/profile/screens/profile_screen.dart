@@ -8,9 +8,7 @@ import '../../../core/widgets/glass_container.dart';
 import '../repositories/user_repository.dart';
 import '../models/profile_model.dart';
 import '../../auth/screens/login_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../widgets/spotify_search_modal.dart';
-import '../../../../core/services/spotify_service.dart';
+
 import '../../settings/screens/settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -33,14 +31,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   String get userYear => profile.year;
   String get userMajor => profile.major;
   String get avatarUrl => profile.avatar;
-
-  // Spotify anthem from repository
-  Map<String, String> get spotifyAnthem => {
-    'title': profile.spotifyTrackName ?? 'No track',
-    'artist': profile.spotifyArtist ?? 'Unknown',
-    'albumArt':
-        'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
-  };
 
   late AnimationController _animController;
 
@@ -763,269 +753,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                     const SizedBox(height: 24),
 
-                    // Spotify Anthem Section
-                    _buildSection(
-                      title: 'On Repeat',
-                      icon: Icons.music_note_rounded,
-                      child: GestureDetector(
-                        onTap: () async {
-                          // Try to open Spotify app first, then fall back to web search
-                          final trackName =
-                              profile.spotifyTrackName ?? 'Blinding Lights';
-                          final artistName =
-                              profile.spotifyArtist ?? 'The Weeknd';
-                          final searchQuery = Uri.encodeComponent(
-                            '$trackName $artistName',
-                          );
-                          final spotifyUri = Uri.parse(
-                            'spotify:search:$searchQuery',
-                          );
-                          final spotifyWebUri = Uri.parse(
-                            'https://open.spotify.com/search/$searchQuery',
-                          );
-
-                          if (await canLaunchUrl(spotifyUri)) {
-                            await launchUrl(spotifyUri);
-                          } else {
-                            await launchUrl(
-                              spotifyWebUri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          }
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20.r),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                const Color(0xFF1DB954).withOpacity(0.15),
-                                NexoraColors.glassBackground,
-                                NexoraColors.primaryPurple.withOpacity(0.08),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: const Color(0xFF1DB954).withOpacity(0.2),
-                              width: 1.w,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF1DB954).withOpacity(0.1),
-                                blurRadius: 20.r,
-                                offset: Offset(0, 4.h),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: Stack(
-                              children: [
-                                // Background blur effect
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
-                                        colors: [
-                                          Colors.white.withOpacity(0.05),
-                                          Colors.transparent,
-                                          Colors.white.withOpacity(0.03),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Content
-                                Padding(
-                                  padding: EdgeInsets.all(14.w),
-                                  child: Row(
-                                    children: [
-                                      // Album art with glass frame
-                                      Container(
-                                        padding: EdgeInsets.all(3.r),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            14.r,
-                                          ),
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                            colors: [
-                                              Colors.white.withOpacity(0.3),
-                                              Colors.white.withOpacity(0.1),
-                                            ],
-                                          ),
-                                        ),
-                                        child: Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            Container(
-                                              width: 52.r,
-                                              height: 52.r,
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(11.r),
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(11.r),
-                                                child: Image.network(
-                                                  spotifyAnthem['albumArt']!,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder:
-                                                      (
-                                                        context,
-                                                        error,
-                                                        stackTrace,
-                                                      ) {
-                                                        return Container(
-                                                          decoration: BoxDecoration(
-                                                            gradient:
-                                                                LinearGradient(
-                                                                  colors: [
-                                                                    const Color(
-                                                                      0xFF1DB954,
-                                                                    ),
-                                                                    const Color(
-                                                                      0xFF1DB954,
-                                                                    ).withOpacity(
-                                                                      0.7,
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                          ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .music_note_rounded,
-                                                            color: Colors.white,
-                                                            size: 24.r,
-                                                          ),
-                                                        );
-                                                      },
-                                                ),
-                                              ),
-                                            ),
-                                            // Frosted play button
-                                            Container(
-                                              width: 26.r,
-                                              height: 26.r,
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(
-                                                  0.4,
-                                                ),
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: Colors.white
-                                                      .withOpacity(0.3),
-                                                  width: 1.5.w,
-                                                ),
-                                              ),
-                                              child: Icon(
-                                                Icons.play_arrow_rounded,
-                                                color: Colors.white,
-                                                size: 16.r,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      // Song info
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              spotifyAnthem['title']!,
-                                              style: TextStyle(
-                                                color: NexoraColors.textPrimary,
-                                                fontSize: 15.sp,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.2.w,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            SizedBox(height: 4.h),
-                                            Row(
-                                              children: [
-                                                Container(
-                                                  width: 14.r,
-                                                  height: 14.r,
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFF1DB954,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          3.r,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.music_note,
-                                                    color: Colors.white,
-                                                    size: 10.r,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Expanded(
-                                                  child: Text(
-                                                    spotifyAnthem['artist']!,
-                                                    style: TextStyle(
-                                                      color: NexoraColors
-                                                          .textMuted,
-                                                      fontSize: 13.sp,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Animated bars indicator
-                                      Container(
-                                        padding: EdgeInsets.all(8.r),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            10.r,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withOpacity(
-                                              0.1,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            _buildMusicBar(8),
-                                            const SizedBox(width: 2),
-                                            _buildMusicBar(14),
-                                            const SizedBox(width: 2),
-                                            _buildMusicBar(10),
-                                            const SizedBox(width: 2),
-                                            _buildMusicBar(16),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
                     const SizedBox(height: 24),
 
                     // Stats Section with Glass Effect
@@ -1036,8 +763,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           _buildStatItem(
-                            'Posts',
-                            '${profile.posts}',
+                            'Likes',
+                            '${profile.profileLikes}',
                             NexoraColors.romanticPink,
                           ),
                           _buildDivider(),
@@ -1249,17 +976,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildMusicBar(double height) {
-    return Container(
-      width: 3,
-      height: height,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1DB954),
-        borderRadius: BorderRadius.circular(2),
-      ),
-    );
-  }
-
   Widget _buildDivider() {
     return Container(height: 40, width: 1, color: NexoraColors.glassBorder);
   }
@@ -1303,9 +1019,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
   late TextEditingController yearController;
   late TextEditingController majorController;
   late TextEditingController instagramController;
-  late TextEditingController spotifyController;
-  late TextEditingController spotifyTrackController;
-  late TextEditingController spotifyArtistController;
 
   // Username validation state
   String? _usernameError;
@@ -1418,8 +1131,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     if (yearController.text.isNotEmpty) completed++;
     if (majorController.text.isNotEmpty) completed++;
     if (selectedInterests.length >= 3) completed++;
-    if (instagramController.text.isNotEmpty ||
-        spotifyController.text.isNotEmpty) {
+    if (instagramController.text.isNotEmpty) {
       completed++;
     }
 
@@ -1438,15 +1150,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     majorController = TextEditingController(text: widget.profile.major);
     instagramController = TextEditingController(
       text: widget.profile.instagram ?? '',
-    );
-    spotifyController = TextEditingController(
-      text: widget.profile.spotify ?? '',
-    );
-    spotifyTrackController = TextEditingController(
-      text: widget.profile.spotifyTrackName ?? '',
-    );
-    spotifyArtistController = TextEditingController(
-      text: widget.profile.spotifyArtist ?? '',
     );
 
     // Initialize from profile
@@ -1583,9 +1286,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     final String year = yearController.text;
     final String major = majorController.text;
     final String instagram = instagramController.text;
-    final String spotify = spotifyController.text;
-    final String spotifyTrack = spotifyTrackController.text;
-    final String spotifyArtist = spotifyArtistController.text;
     final String looking = selectedLookingFor;
 
     final updatedProfile = widget.profile.copyWith(
@@ -1596,9 +1296,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       major: major,
       interests: selectedInterests,
       instagram: instagram,
-      spotify: spotify,
-      spotifyTrackName: spotifyTrack,
-      spotifyArtist: spotifyArtist,
       lookingFor: looking,
       avatarSeed: avatarSeed,
       avatarStyle: avatarStyle,
@@ -1620,23 +1317,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       borderRadius: 12.r,
       icon: const Icon(Icons.check_circle, color: Colors.white),
     );
-  }
-
-  Future<void> _showSpotifySearchModal() async {
-    final track = await showModalBottomSheet<SpotifyTrack>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const SpotifySearchModal(),
-    );
-
-    if (track != null) {
-      setState(() {
-        spotifyController.text = track.spotifyUrl;
-        spotifyTrackController.text = track.name;
-        spotifyArtistController.text = track.artist;
-      });
-    }
   }
 
   void _toggleInterest(String interest) {
@@ -1782,8 +1462,8 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                               ),
                             ),
                             SizedBox(height: 12.h),
-                            _buildSocialLinksCard(),
 
+                            // TODO: Add other social links if needed
                             SizedBox(height: 32.h),
 
                             // Save Button
@@ -2217,7 +1897,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                     ? [
                         BoxShadow(
                           color: NexoraColors.primaryPurple.withOpacity(0.3),
-                          blurRadius: 8.r,
+                          blurRadius: 3.r,
                         ),
                       ]
                     : null,
@@ -2342,113 +2022,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
-  Widget _buildSocialLinksCard() {
-    return GlassContainer(
-      borderRadius: 20.r,
-      padding: EdgeInsets.all(20.w),
-      child: Column(
-        children: [
-          _buildSocialField(
-            label: 'Spotify Profile URL',
-            controller: spotifyController,
-            icon: Icons.link,
-            color: const Color(0xFF1DB954),
-            hint: 'spotify.com/user/...',
-          ),
-
-          SizedBox(height: 20.h),
-          ElevatedButton.icon(
-            onPressed: _showSpotifySearchModal,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1DB954),
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(vertical: 16.h),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.r),
-              ),
-              elevation: 4,
-            ),
-            icon: Icon(Icons.search, size: 20.r),
-            label: Text(
-              'Search Spotify for Song',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.sp),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSocialField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    required Color color,
-    String? prefix,
-    String? hint,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, color: color, size: 18.r),
-            SizedBox(width: 8.w),
-            Text(
-              label,
-              style: TextStyle(
-                color: NexoraColors.textPrimary,
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 8.h),
-        Container(
-          decoration: BoxDecoration(
-            color: NexoraColors.cardBackground,
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: NexoraColors.cardBorder, width: 1.w),
-          ),
-          child: TextField(
-            controller: controller,
-            style: const TextStyle(color: NexoraColors.textPrimary),
-            decoration: InputDecoration(
-              prefixIcon: prefix != null
-                  ? Padding(
-                      padding: EdgeInsets.only(left: 16.w, right: 4.w),
-                      child: Text(
-                        prefix,
-                        style: TextStyle(
-                          color: NexoraColors.textMuted,
-                          fontSize: 15.sp,
-                        ),
-                      ),
-                    )
-                  : null,
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 0,
-                minHeight: 0,
-              ),
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: NexoraColors.textMuted.withOpacity(0.5),
-              ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.only(
-                left: prefix != null ? 0 : 16.w,
-                right: 16.w,
-                top: 14.h,
-                bottom: 14.h,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildSaveButton() {
     return GestureDetector(
       onTap: _saveProfile,
@@ -2456,13 +2029,17 @@ class _EditProfileScreenState extends State<EditProfileScreen>
         width: double.infinity,
         padding: EdgeInsets.symmetric(vertical: 18.h),
         decoration: BoxDecoration(
-          gradient: NexoraGradients.primaryButton,
+          gradient: NexoraGradients.glassyGradient,
           borderRadius: BorderRadius.circular(16.r),
+          border: Border.all(
+            color: NexoraColors.primaryPurple.withOpacity(0.2),
+            width: 1.w,
+          ),
           boxShadow: [
             BoxShadow(
-              color: NexoraColors.primaryPurple.withOpacity(0.4),
-              blurRadius: 20.r,
-              offset: Offset(0, 8.h),
+              color: NexoraColors.primaryPurple.withOpacity(0.1),
+              blurRadius: 10.r,
+              offset: Offset(0, 4.h),
             ),
           ],
         ),
@@ -2709,7 +2286,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     yearController.dispose();
     majorController.dispose();
     instagramController.dispose();
-    spotifyController.dispose();
+
     _animController.dispose();
     super.dispose();
   }

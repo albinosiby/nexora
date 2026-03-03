@@ -1,16 +1,23 @@
-import 'package:get/get.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../../auth/repositories/auth_repository.dart';
 
-class ChatRepository extends GetxService {
-  static ChatRepository get instance => Get.find<ChatRepository>();
+class ChatRepository {
+  static final ChatRepository instance = ChatRepository();
 
-  final FirebaseDatabase _db = FirebaseDatabase.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final AuthRepository _auth = AuthRepository.instance;
+  final FirebaseDatabase _db;
+  final FirebaseFirestore _firestore;
+  final AuthRepository _auth;
+
+  ChatRepository({
+    FirebaseDatabase? firebaseDatabase,
+    FirebaseFirestore? firebaseFirestore,
+    AuthRepository? authRepository,
+  }) : _db = firebaseDatabase ?? FirebaseDatabase.instance,
+       _firestore = firebaseFirestore ?? FirebaseFirestore.instance,
+       _auth = authRepository ?? AuthRepository.instance;
 
   String? get currentUserId => _auth.user?.uid;
 
@@ -64,6 +71,15 @@ class ChatRepository extends GetxService {
     });
   }
 
+  /// Get unread message count for a specific chat
+  Stream<int> getUnreadCount(String chatId) {
+    if (currentUserId == null) return Stream.value(0);
+    return _db
+        .ref('user_chats/$currentUserId/$chatId/unreadCount')
+        .onValue
+        .map((event) => (event.snapshot.value as int?) ?? 0);
+  }
+
   /// Send a message
   Future<String> sendMessage({
     required String chatId,
@@ -74,14 +90,18 @@ class ChatRepository extends GetxService {
     String? replyToId,
     String? replyToContent,
     String? replyToSenderId,
+    String? messageId,
   }) async {
     if (currentUserId == null) return '';
 
-    final messageRef = _db.ref('messages/$chatId').push();
-    final messageId = messageRef.key!;
+    final DatabaseReference dbRef = _db.ref('messages/$chatId');
+    final messageRef = messageId != null
+        ? dbRef.child(messageId)
+        : dbRef.push();
+    final String finalMessageId = messageId ?? messageRef.key!;
 
     final message = MessageModel(
-      id: messageId,
+      id: finalMessageId,
       chatId: chatId,
       senderId: currentUserId!,
       content: content,
@@ -124,7 +144,7 @@ class ChatRepository extends GetxService {
       }
     }
 
-    return messageId;
+    return finalMessageId;
   }
 
   /// Find an existing chat with another user
@@ -271,5 +291,54 @@ class ChatRepository extends GetxService {
     String? reaction,
   ) async {
     await _db.ref('messages/$chatId/$messageId/reaction').set(reaction);
+  }
+
+  /// Clear all messages in a chat (local user's view)
+  Future<void> clearMessages(String chatId) async {
+    if (currentUserId == null) return;
+    await _db.ref('messages/$chatId').remove();
+    // Reset last message in chat metadata
+    await _db.ref('chats/$chatId').update({
+      'lastMessage': '',
+      'lastMessageTime': ServerValue.timestamp,
+    });
+  }
+
+  /// Mute or unmute notifications for a chat
+  Future<bool> toggleMuteChat(String chatId) async {
+    if (currentUserId == null) return false;
+    final muteRef = _db.ref('user_chats/$currentUserId/$chatId/muted');
+    final snapshot = await muteRef.get();
+    final isMuted = snapshot.value as bool? ?? false;
+    await muteRef.set(!isMuted);
+    return !isMuted;
+  }
+
+  /// Check if a chat is muted
+  Future<bool> isChatMuted(String chatId) async {
+    if (currentUserId == null) return false;
+    final snapshot = await _db
+        .ref('user_chats/$currentUserId/$chatId/muted')
+        .get();
+    return snapshot.value as bool? ?? false;
+  }
+
+  /// Block a user
+  Future<void> blockUser(String blockedUserId) async {
+    if (currentUserId == null) return;
+    await _firestore.collection('users').doc(currentUserId).update({
+      'blockedUsers': FieldValue.arrayUnion([blockedUserId]),
+    });
+  }
+
+  /// Report a user
+  Future<void> reportUser(String reportedUserId, String reason) async {
+    if (currentUserId == null) return;
+    await _firestore.collection('reports').add({
+      'reporterId': currentUserId,
+      'reportedUserId': reportedUserId,
+      'reason': reason,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 }

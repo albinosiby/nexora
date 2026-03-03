@@ -16,9 +16,6 @@ class UserModel {
   final int following;
   final int posts;
   final String? instagram;
-  final String? spotify;
-  final String? spotifyTrackName;
-  final String? spotifyArtist;
   final String? lookingFor;
   final String avatarSeed;
   final String avatarStyle;
@@ -29,6 +26,8 @@ class UserModel {
   final bool pushNotifications;
   final bool messageNotifications;
   final bool feedNotifications;
+  final int profileLikes;
+  final List<String> likedBy;
 
   UserModel({
     required this.id,
@@ -47,9 +46,6 @@ class UserModel {
     this.following = 0,
     this.posts = 0,
     this.instagram,
-    this.spotify,
-    this.spotifyTrackName,
-    this.spotifyArtist,
     this.lookingFor,
     this.avatarSeed = '',
     this.avatarStyle = 'avataaars',
@@ -60,6 +56,8 @@ class UserModel {
     this.pushNotifications = true,
     this.messageNotifications = true,
     this.feedNotifications = true,
+    this.profileLikes = 0,
+    this.likedBy = const [],
   });
 
   String get displayName =>
@@ -83,9 +81,6 @@ class UserModel {
       following: json['following'] ?? 0,
       posts: json['posts'] ?? 0,
       instagram: json['instagram'],
-      spotify: json['spotify'],
-      spotifyTrackName: json['spotifyTrackName'],
-      spotifyArtist: json['spotifyArtist'],
       lookingFor: json['lookingFor'],
       chats: List<String>.from(json['chats'] ?? []),
       avatarSeed: json['avatarSeed'] ?? '',
@@ -104,6 +99,8 @@ class UserModel {
       pushNotifications: json['pushNotifications'] ?? true,
       messageNotifications: json['messageNotifications'] ?? true,
       feedNotifications: json['feedNotifications'] ?? true,
+      profileLikes: json['profileLikes'] ?? 0,
+      likedBy: List<String>.from(json['likedBy'] ?? []),
     );
   }
 
@@ -125,9 +122,6 @@ class UserModel {
       'following': following,
       'posts': posts,
       'instagram': instagram,
-      'spotify': spotify,
-      'spotifyTrackName': spotifyTrackName,
-      'spotifyArtist': spotifyArtist,
       'lookingFor': lookingFor,
       'avatarSeed': avatarSeed,
       'avatarStyle': avatarStyle,
@@ -138,6 +132,8 @@ class UserModel {
       'pushNotifications': pushNotifications,
       'messageNotifications': messageNotifications,
       'feedNotifications': feedNotifications,
+      'profileLikes': profileLikes,
+      'likedBy': likedBy,
     };
   }
 
@@ -160,9 +156,6 @@ class UserModel {
       'following': following,
       'posts': posts,
       'instagram': instagram,
-      'spotify': spotify,
-      'spotifyTrackName': spotifyTrackName,
-      'spotifyArtist': spotifyArtist,
       'lookingFor': lookingFor,
       'avatarSeed': avatarSeed,
       'avatarStyle': avatarStyle,
@@ -173,6 +166,8 @@ class UserModel {
       'pushNotifications': pushNotifications,
       'messageNotifications': messageNotifications,
       'feedNotifications': feedNotifications,
+      'profileLikes': profileLikes,
+      'likedBy': likedBy,
     };
   }
 
@@ -205,9 +200,6 @@ class UserModel {
     int? age,
     int? posts,
     String? instagram,
-    String? spotify,
-    String? spotifyTrackName,
-    String? spotifyArtist,
     String? lookingFor,
     String? avatarSeed,
     String? avatarStyle,
@@ -218,6 +210,8 @@ class UserModel {
     bool? pushNotifications,
     bool? messageNotifications,
     bool? feedNotifications,
+    int? profileLikes,
+    List<String>? likedBy,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -236,9 +230,6 @@ class UserModel {
       age: age ?? this.age,
       posts: posts ?? this.posts,
       instagram: instagram ?? this.instagram,
-      spotify: spotify ?? this.spotify,
-      spotifyTrackName: spotifyTrackName ?? this.spotifyTrackName,
-      spotifyArtist: spotifyArtist ?? this.spotifyArtist,
       lookingFor: lookingFor ?? this.lookingFor,
       avatarSeed: avatarSeed ?? this.avatarSeed,
       avatarStyle: avatarStyle ?? this.avatarStyle,
@@ -249,6 +240,8 @@ class UserModel {
       pushNotifications: pushNotifications ?? this.pushNotifications,
       messageNotifications: messageNotifications ?? this.messageNotifications,
       feedNotifications: feedNotifications ?? this.feedNotifications,
+      profileLikes: profileLikes ?? this.profileLikes,
+      likedBy: likedBy ?? this.likedBy,
     );
   }
 }

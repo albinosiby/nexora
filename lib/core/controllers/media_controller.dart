@@ -1,19 +1,14 @@
-import 'package:get/get.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class MediaController extends GetxController {
-  static MediaController get instance => Get.find<MediaController>();
-
+class MediaController extends Notifier<Map<String, String>> {
   static const String _storageKey = 'downloaded_media_ids';
   late SharedPreferences _prefs;
 
-  // Use a reactive Map to track downloaded media IDs and their local paths
-  final RxMap<String, String> _downloadedPaths = <String, String>{}.obs;
-
   @override
-  void onInit() {
-    super.onInit();
+  Map<String, String> build() {
     _loadFromPrefs();
+    return {};
   }
 
   Future<void> _loadFromPrefs() async {
@@ -27,30 +22,35 @@ class MediaController extends GetxController {
           loadedPaths[parts[0]] = parts[1];
         }
       }
-      _downloadedPaths.assignAll(loadedPaths);
+      state = loadedPaths;
     }
   }
 
-  bool isDownloaded(String id) => _downloadedPaths.containsKey(id);
+  bool isDownloaded(String id) => state.containsKey(id);
 
-  String? getLocalPath(String id) => _downloadedPaths[id];
+  String? getLocalPath(String id) => state[id];
 
   void markAsDownloaded(String id, String path) {
-    if (_downloadedPaths[id] != path) {
-      _downloadedPaths[id] = path;
+    if (state[id] != path) {
+      state = {...state, id: path};
       _saveToPrefs();
     }
   }
 
   Future<void> _saveToPrefs() async {
-    final List<String> entriesToSave = _downloadedPaths.entries
+    final List<String> entriesToSave = state.entries
         .map((e) => '${e.key}|${e.value}')
         .toList();
     await _prefs.setStringList(_storageKey, entriesToSave);
   }
 
   void clearCache() {
-    _downloadedPaths.clear();
+    state = {};
     _saveToPrefs();
   }
 }
+
+final mediaControllerProvider =
+    NotifierProvider<MediaController, Map<String, String>>(() {
+      return MediaController();
+    });

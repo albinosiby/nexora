@@ -6,6 +6,7 @@ import '../../../core/theme/nexora_theme.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../notifications/models/notification_model.dart';
 import '../../notifications/repositories/notification_repository.dart';
+import '../../discover/screens/match_success_screen.dart';
 
 enum ConnectionStatus {
   none,
@@ -366,6 +367,19 @@ class ConnectionService extends GetxController {
 
         await _notificationRepo.addNotification(notification, userId);
       }
+
+      // Show Artistic Match Success Screen
+      Get.to(
+        () => MatchSuccessScreen(
+          otherUserName: otherName,
+          otherUserAvatar: otherAvatar,
+          myName: currentUser.displayName,
+          myAvatar: currentUser.avatar ?? '',
+          otherUserId: userId,
+        ),
+        transition: Transition.zoom,
+        duration: const Duration(milliseconds: 600),
+      );
     } catch (e) {
       debugPrint('Error accepting request: $e');
       Get.snackbar(

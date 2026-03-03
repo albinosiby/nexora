@@ -66,7 +66,9 @@ class PostModel {
       userId: json['userId'] ?? '',
       user: json['user'] ?? '',
       username: json['username'] ?? '',
-      avatar: json['avatar'] ?? '',
+      avatar: (json['avatar'] as String? ?? '').startsWith('http')
+          ? json['avatar']
+          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${json['user'] ?? json['username'] ?? json['userId'] ?? 'User'}',
       time: json['time'] ?? '',
       content: json['content'] ?? '',
       likes: json['likes'] ?? 0,
@@ -242,7 +244,9 @@ class CommentModel {
       userId: json['userId'] ?? '',
       user: json['user'] ?? '',
       username: json['username'] ?? '',
-      avatar: json['avatar'] ?? '',
+      avatar: (json['avatar'] as String? ?? '').startsWith('http')
+          ? json['avatar']
+          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${json['user'] ?? json['username'] ?? json['userId'] ?? 'User'}',
       comment: json['comment'] ?? '',
       time: json['time'] ?? '',
       createdAt: _parseDate(json['createdAt']),

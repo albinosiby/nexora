@@ -16,9 +16,9 @@ class MatchUserModel {
   final bool isVerified;
   final DateTime? lastActive;
   final List<String> photos;
-  final String? spotifyTrackName;
-  final String? spotifyArtist;
   final String? lookingFor;
+  final int profileLikes;
+  final List<String> likedBy;
 
   MatchUserModel({
     required this.id,
@@ -35,9 +35,9 @@ class MatchUserModel {
     this.isVerified = false,
     this.lastActive,
     this.photos = const [],
-    this.spotifyTrackName,
-    this.spotifyArtist,
     this.lookingFor,
+    this.profileLikes = 0,
+    this.likedBy = const [],
   });
 
   /// Create from Firestore document data
@@ -66,9 +66,9 @@ class MatchUserModel {
                 : (data['lastActive'] as dynamic).toDate())
           : null,
       photos: List<String>.from(data['photos'] ?? []),
-      spotifyTrackName: data['spotifyTrackName'],
-      spotifyArtist: data['spotifyArtist'],
       lookingFor: data['lookingFor'],
+      profileLikes: data['profileLikes'] ?? 0,
+      likedBy: List<String>.from(data['likedBy'] ?? []),
     );
   }
 
@@ -89,9 +89,9 @@ class MatchUserModel {
       interests: interests,
       photos: photos,
       connections: connections,
-      spotifyTrackName: spotifyTrackName,
-      spotifyArtist: spotifyArtist,
       lookingFor: lookingFor,
+      profileLikes: profileLikes,
+      likedBy: likedBy,
     );
   }
 

@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:get/get.dart';
 
-class StorageService extends GetxService {
-  static StorageService get instance => Get.find<StorageService>();
+class StorageService {
+  static final StorageService instance = StorageService();
 
   final FirebaseStorage _storage = FirebaseStorage.instance;
 

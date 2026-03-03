@@ -1,16 +1,24 @@
-import 'package:get/get.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/profile_model.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../auth/models/user_model.dart';
+import '../../notifications/models/notification_model.dart';
 
-class UserRepository extends GetxService {
-  static UserRepository get instance => Get.find<UserRepository>();
+class UserRepository {
+  static final UserRepository instance = UserRepository();
 
-  final FirebaseDatabase _db = FirebaseDatabase.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final AuthRepository _auth = AuthRepository.instance;
+  final FirebaseDatabase _db;
+  final FirebaseFirestore _firestore;
+  final AuthRepository _auth;
+
+  UserRepository({
+    FirebaseDatabase? firebaseDatabase,
+    FirebaseFirestore? firebaseFirestore,
+    AuthRepository? authRepository,
+  }) : _db = firebaseDatabase ?? FirebaseDatabase.instance,
+       _firestore = firebaseFirestore ?? FirebaseFirestore.instance,
+       _auth = authRepository ?? AuthRepository.instance;
 
   String? get currentUserId => _auth.user?.uid;
 
@@ -41,12 +49,11 @@ class UserRepository extends GetxService {
       connections: user.connections,
       posts: user.posts,
       instagram: user.instagram,
-      spotify: user.spotify,
-      spotifyTrackName: user.spotifyTrackName,
-      spotifyArtist: user.spotifyArtist,
       lookingFor: user.lookingFor,
       avatarSeed: user.avatarSeed,
       avatarStyle: user.avatarStyle,
+      profileLikes: user.profileLikes,
+      likedBy: user.likedBy,
       photos: [],
     );
   }
@@ -125,6 +132,23 @@ class UserRepository extends GetxService {
     return otherUsers.isNotEmpty;
   }
 
+  /// Get user by username from Firestore
+  Future<ProfileModel?> getUserByUsername(String username) async {
+    if (username.isEmpty) return null;
+    final query = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: username.toLowerCase())
+        .limit(1)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      return ProfileModel.fromUserData(
+        UserModel.fromJson(query.docs.first.data()),
+      );
+    }
+    return null;
+  }
+
   /// Submit feedback to Firestore
   Future<void> submitFeedback(String category, String message) async {
     if (currentUserId == null) return;
@@ -137,5 +161,75 @@ class UserRepository extends GetxService {
       'message': message,
       'timestamp': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Toggle profile like
+  Future<void> toggleProfileLike(String targetUserId) async {
+    if (currentUserId == null) return;
+
+    try {
+      final targetUserDoc = _firestore.collection('users').doc(targetUserId);
+      final targetDoc = await targetUserDoc.get();
+
+      if (!targetDoc.exists) return;
+
+      final targetData = targetDoc.data()!;
+      final List<String> likedBy = List<String>.from(
+        targetData['likedBy'] ?? [],
+      );
+      final bool isCurrentlyLiked = likedBy.contains(currentUserId);
+
+      if (isCurrentlyLiked) {
+        // Unlike
+        await targetUserDoc.update({
+          'likedBy': FieldValue.arrayRemove([currentUserId]),
+          'profileLikes': FieldValue.increment(-1),
+        });
+      } else {
+        // Like
+        await targetUserDoc.update({
+          'likedBy': FieldValue.arrayUnion([currentUserId]),
+          'profileLikes': FieldValue.increment(1),
+        });
+
+        // Get current user info for notification
+        final currentUserRef = _firestore
+            .collection('users')
+            .doc(currentUserId);
+        final currentUserDoc = await currentUserRef.get();
+        if (currentUserDoc.exists) {
+          final currentUserData = currentUserDoc.data()!;
+          final currentUserName =
+              currentUserData['username'] ??
+              currentUserData['name'] ??
+              'Someone';
+          final currentUserAvatar = currentUserData['avatar'] ?? '';
+
+          // Send notification
+          final notification = NotificationModel(
+            id: '',
+            type: NotificationType.profileLike,
+            userId: currentUserId!,
+            userName: currentUserName,
+            userAvatar: currentUserAvatar,
+            message: 'liked your profile! ✨',
+            timestamp: DateTime.now(),
+          );
+
+          await _firestore
+              .collection('users')
+              .doc(targetUserId)
+              .collection('notifications')
+              .add(notification.toFirestore());
+        }
+      }
+
+      // Refresh local state if the target is the current user (unlikely but possible)
+      if (targetUserId == currentUserId) {
+        await _auth.refreshProfile();
+      }
+    } catch (e) {
+      print('Error toggling like: $e');
+    }
   }
 }

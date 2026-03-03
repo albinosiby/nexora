@@ -18,19 +18,28 @@ class NexoraColors {
   static const Color midnightBlue = Color(0xFF0A0A1A); // Extremely Deep Blue
 
   // ---------------- PRIMARY BRAND COLORS ----------------
-  static const Color primaryPurple = Color(0xFF9D4EDD); // Main NEXORA purple
-  static const Color brightPurple = Color(0xFFC77DFF); // Bright neon purple
-  static const Color deepPurple = Color(0xFF7B2CBF); // Deep royal purple
+  static const Color primaryOrange = Color(0xFFFF8C00); // Main NEXORA orange
+  static const Color brightOrange = Color(0xFFFFA500); // Bright neon orange
+  static const Color deepOrange = Color(0xFFE65100); // Deep royal orange
+  // ---------------- BRAND ACCENT COLORS ----------------
+  static const Color flameRed = Color(0xFFFF4500); // Flame red for highlight
+  static const Color peachOrange = Color(
+    0xFFFFCC80,
+  ); // Peach orange for soft accent
+  static const Color loveRed = Color(0xFFFF2400); // Scarlet red
+  static const Color accentAmber = Color(0xFFFFBF00); // Bright amber accent
+  static const Color softAmber = Color(0xFFFFD700); // Gold amber
+  static const Color deepAmber = Color(0xFFCC7722); // Ocher amber
 
-  // ---------------- ROMANTIC ACCENTS ----------------
-  static const Color romanticPink = Color(0xFFF72585); // Hot pink for hearts
-  static const Color softPink = Color(0xFFFF4FA3); // Soft romantic pink
-  static const Color loveRed = Color(0xFFE63946); // Heart red
-
-  // ---------------- CYAN ACCENTS ----------------
-  static const Color accentCyan = Color(0xFF4CC9F0); // Bright cyan accent
-  static const Color softCyan = Color(0xFF48CAE4); // Soft cyan
-  static const Color deepCyan = Color(0xFF0096C7); // Deep ocean cyan
+  // --- BACKWARD COMPATIBILITY ALIASES ---
+  static const Color primaryPurple = primaryOrange;
+  static const Color romanticPink = flameRed;
+  static const Color softPink = peachOrange;
+  static const Color accentCyan = accentAmber;
+  static const Color softCyan = softAmber;
+  static const Color deepCyan = deepAmber;
+  static const Color brightPurple = brightOrange;
+  static const Color deepPurple = deepOrange;
 
   // ---------------- TEXT COLORS ----------------
   static const Color textPrimary = Colors.white;
@@ -65,47 +74,47 @@ class NexoraGradients {
   static const LinearGradient mainBackground = LinearGradient(
     colors: [
       NexoraColors.midnightDark,
-      NexoraColors.midnightPurple,
-      NexoraColors.midnightBlue,
+      Color(0xFF1A0F00), // Midnight Orange
+      NexoraColors.midnightDark,
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  // Purple glow gradient
+  // Orange glow gradient
   static LinearGradient purpleGlow = LinearGradient(
-    colors: [NexoraColors.primaryPurple.withOpacity(0.3), Colors.transparent],
+    colors: [NexoraColors.primaryOrange.withOpacity(0.3), Colors.transparent],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
-  // Primary button gradient
+  // Primary button gradient (Glassy Style)
   static final LinearGradient primaryButton = LinearGradient(
     colors: [
-      NexoraColors.primaryPurple.withOpacity(0.85),
-      NexoraColors.romanticPink.withOpacity(0.85),
+      NexoraColors.glassBackground,
+      NexoraColors.primaryPurple.withOpacity(0.1),
     ],
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
   );
 
-  // Romantic glow for match screen
+  // Orange glow for match screen
   static const LinearGradient romanticGlow = LinearGradient(
-    colors: [NexoraColors.romanticPink, NexoraColors.primaryPurple],
+    colors: [NexoraColors.flameRed, NexoraColors.primaryOrange],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  // Cyan accent gradient
+  // Amber accent gradient
   static const LinearGradient cyanAccent = LinearGradient(
-    colors: [NexoraColors.accentCyan, NexoraColors.softCyan],
+    colors: [NexoraColors.accentAmber, NexoraColors.softAmber],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  // Heart pulse gradient
+  // Flame pulse gradient
   static const LinearGradient heartPulse = LinearGradient(
-    colors: [NexoraColors.romanticPink, NexoraColors.loveRed],
+    colors: [NexoraColors.flameRed, NexoraColors.loveRed],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -123,11 +132,21 @@ class NexoraGradients {
   // NEXORA logo gradient
   static const LinearGradient logoGradient = LinearGradient(
     colors: [
-      NexoraColors.primaryPurple,
-      NexoraColors.romanticPink,
-      NexoraColors.accentCyan,
+      NexoraColors.primaryOrange,
+      NexoraColors.flameRed,
+      NexoraColors.accentAmber,
     ],
     stops: [0.3, 0.6, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Glassy button/filter gradient
+  static final LinearGradient glassyGradient = LinearGradient(
+    colors: [
+      NexoraColors.glassBackground,
+      NexoraColors.primaryPurple.withOpacity(0.1),
+    ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -138,31 +157,31 @@ class NexoraGradients {
 /// =====================================================
 
 class NexoraShadows {
-  // Purple glow for active elements
+  // Orange glow for active elements
   static BoxShadow purpleGlow = BoxShadow(
-    color: NexoraColors.primaryPurple.withOpacity(0.3),
+    color: NexoraColors.primaryOrange.withOpacity(0.3),
     blurRadius: 20,
     spreadRadius: 0,
     offset: const Offset(0, 4),
   );
 
-  // Intense purple glow for highlights
+  // Intense orange glow for highlights
   static BoxShadow intensePurpleGlow = BoxShadow(
-    color: NexoraColors.primaryPurple.withOpacity(0.6),
+    color: NexoraColors.primaryOrange.withOpacity(0.6),
     blurRadius: 30,
     spreadRadius: 5,
   );
 
-  // Pink glow for romantic elements
+  // Flame glow for romantic elements
   static BoxShadow pinkGlow = BoxShadow(
-    color: NexoraColors.romanticPink.withOpacity(0.4),
+    color: NexoraColors.flameRed.withOpacity(0.4),
     blurRadius: 25,
     spreadRadius: 2,
   );
 
-  // Cyan glow for accents
+  // Amber glow for accents
   static BoxShadow cyanGlow = BoxShadow(
-    color: NexoraColors.accentCyan.withOpacity(0.3),
+    color: NexoraColors.accentAmber.withOpacity(0.3),
     blurRadius: 20,
     spreadRadius: 2,
   );
@@ -243,7 +262,7 @@ class NexoraTextStyles {
   static TextStyle get romanticText => TextStyle(
     fontSize: 16.sp,
     fontWeight: FontWeight.w600,
-    color: NexoraColors.romanticPink,
+    color: NexoraColors.primaryOrange,
   );
 
   static TextStyle get glowingText => TextStyle(
@@ -252,7 +271,7 @@ class NexoraTextStyles {
     color: NexoraColors.textPrimary,
     shadows: [
       Shadow(
-        color: NexoraColors.primaryPurple.withOpacity(0.5),
+        color: NexoraColors.primaryOrange.withOpacity(0.5),
         blurRadius: 10.r,
       ),
     ],
@@ -414,10 +433,10 @@ class NexoraTheme {
 
     // Color Scheme
     colorScheme: const ColorScheme.dark(
-      primary: NexoraColors.primaryPurple,
-      secondary: NexoraColors.romanticPink,
-      tertiary: NexoraColors.accentCyan,
-      surface: NexoraColors.midnightPurple,
+      primary: NexoraColors.primaryOrange,
+      secondary: NexoraColors.flameRed,
+      tertiary: NexoraColors.accentAmber,
+      surface: Color(0xFF121212),
       error: NexoraColors.error,
       onPrimary: NexoraColors.textPrimary,
       onSecondary: NexoraColors.textPrimary,
@@ -496,7 +515,7 @@ class NexoraTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16.r),
-        borderSide: BorderSide(color: NexoraColors.primaryPurple, width: 1.w),
+        borderSide: BorderSide(color: NexoraColors.primaryOrange, width: 1.w),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16.r),
@@ -534,7 +553,7 @@ class NexoraTheme {
       labelColor: NexoraColors.textPrimary,
       unselectedLabelColor: NexoraColors.textMuted,
       indicator: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(30.r),
         gradient: NexoraGradients.primaryButton,
       ),
       indicatorSize: TabBarIndicatorSize.tab,
@@ -542,14 +561,14 @@ class NexoraTheme {
 
     // Floating Action Button Theme
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: NexoraColors.primaryPurple,
+      backgroundColor: NexoraColors.primaryOrange,
       foregroundColor: NexoraColors.textPrimary,
       elevation: 8,
     ),
 
     // Progress Indicator Theme
     progressIndicatorTheme: ProgressIndicatorThemeData(
-      color: NexoraColors.primaryPurple,
+      color: NexoraColors.primaryOrange,
       circularTrackColor: Colors.white.withOpacity(0.08),
     ),
 
@@ -578,6 +597,9 @@ class NexoraTheme {
     ),
   );
 
+  static ThemeData get lightTheme =>
+      darkTheme; // Fallback to dark theme for now
+
   static InputDecoration glassInputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
@@ -595,7 +617,7 @@ class NexoraTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12.r),
-        borderSide: const BorderSide(color: NexoraColors.primaryPurple),
+        borderSide: const BorderSide(color: NexoraColors.primaryOrange),
       ),
     );
   }

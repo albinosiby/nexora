@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/dark_background.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../auth/models/user_model.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../repositories/feed_repo.dart';
 import '../model/feed_model.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,14 +23,16 @@ import '../../chat/models/message_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 
-class BroadcastScreen extends StatefulWidget {
+import '../providers/feed_providers.dart';
+
+class BroadcastScreen extends ConsumerStatefulWidget {
   const BroadcastScreen({super.key});
 
   @override
-  State<BroadcastScreen> createState() => _BroadcastScreenState();
+  ConsumerState<BroadcastScreen> createState() => _BroadcastScreenState();
 }
 
-class _BroadcastScreenState extends State<BroadcastScreen>
+class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
     with TickerProviderStateMixin {
   late AnimationController _refreshController;
   // Removed _fabAnimationController since FAB will always be visible.
@@ -36,7 +40,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   final ScrollController _scrollController = ScrollController();
 
   String _searchQuery = '';
-  bool _isLoading = false;
   // Removed _isFabVisible since FAB will always be visible.
   // Reactive user profile from AuthRepository
   UserModel? get _currentUser => AuthRepository.instance.currentUserProfile;
@@ -44,11 +47,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   String get _userAvatar => _currentUser?.avatar ?? '';
   String get _userId => _currentUser?.id ?? '';
 
-  List<PostModel> _allPosts = [];
-
-  List<PostModel> get filteredPosts {
-    if (_searchQuery.isEmpty) return _allPosts;
-    return _allPosts.where((post) {
+  List<PostModel> _getFilteredPosts(List<PostModel> posts) {
+    if (_searchQuery.isEmpty) return posts;
+    return posts.where((post) {
       final content = post.content.toLowerCase();
       final user = post.user.toLowerCase();
       final username = post.username.toLowerCase();
@@ -68,24 +69,11 @@ class _BroadcastScreenState extends State<BroadcastScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _subscribeToPosts();
-  }
-
-  void _subscribeToPosts() {
-    setState(() => _isLoading = true);
-    PostRepository.instance.getPostsStream().listen((posts) {
-      if (mounted) {
-        setState(() {
-          _allPosts = posts;
-          _isLoading = false;
-        });
-      }
-    });
   }
 
   Future<void> _loadPosts() async {
-    // Kept for compatibility if called elsewhere, but we use streams now
-    _subscribeToPosts();
+    // This is now handled by Riverpod's postsStreamProvider
+    ref.invalidate(postsStreamProvider);
   }
 
   @override
@@ -112,27 +100,26 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  void _toggleLike(int index) async {
+  void _toggleLike(PostModel post) {
+    PostRepository.instance.toggleLike(post.id, _userId);
+    // The stream will handle the UI update automatically
     HapticFeedback.lightImpact();
-    final post = filteredPosts[index];
-
-    // We don't need optimistic update here necessarily if stream is fast,
-    // but we can keep it for UX.
-    await PostRepository.instance.toggleLike(post.id, _userId);
   }
 
-  void _toggleSave(int index) async {
+  void _toggleSave(PostModel post) {
+    PostRepository.instance.toggleSave(post.id, _userId);
+    // The stream will handle the UI update automatically
     HapticFeedback.lightImpact();
-    final post = filteredPosts[index];
-
-    await PostRepository.instance.toggleSave(post.id, _userId);
   }
 
-  void _showPostOptions(PostModel post, int index) {
+  void _showPostOptions(PostModel post) {
     final isOwnPost = post.userId == _userId || post.displayName == _userName;
 
-    Get.bottomSheet(
-      Container(
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -167,8 +154,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   label: 'Edit Post',
                   color: NexoraColors.accentCyan,
                   onTap: () {
-                    Get.back();
-                    _editPost(post, index);
+                    Navigator.of(context).pop();
+                    _editPost(post);
                   },
                 ),
                 _buildOptionTile(
@@ -176,8 +163,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   label: 'Delete Post',
                   color: NexoraColors.error,
                   onTap: () {
-                    Get.back();
-                    _confirmDeletePost(index);
+                    Navigator.of(context).pop();
+                    _confirmDeletePost(post);
                   },
                 ),
               ],
@@ -187,15 +174,19 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   label: 'Follow ${post.displayName}',
                   color: NexoraColors.primaryPurple,
                   onTap: () {
-                    Get.back();
-                    Get.snackbar(
-                      'Following',
-                      'You are now following ${post.displayName}',
-                      backgroundColor: NexoraColors.success.withOpacity(0.9),
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP,
-                      margin: EdgeInsets.all(16.r),
-                      borderRadius: 12.r,
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'You are now following ${post.displayName}',
+                        ),
+                        backgroundColor: NexoraColors.success.withOpacity(0.9),
+                        behavior: SnackBarBehavior.floating,
+                        margin: EdgeInsets.all(16.r),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -204,15 +195,19 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   label: 'Mute this user',
                   color: NexoraColors.warning,
                   onTap: () {
-                    Get.back();
-                    Get.snackbar(
-                      'Muted',
-                      'You won\'t see posts from ${post.displayName}',
-                      backgroundColor: NexoraColors.warning.withOpacity(0.9),
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP,
-                      margin: EdgeInsets.all(16.r),
-                      borderRadius: 12.r,
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          "You won't see posts from ${post.displayName}",
+                        ),
+                        backgroundColor: NexoraColors.warning.withOpacity(0.9),
+                        behavior: SnackBarBehavior.floating,
+                        margin: EdgeInsets.all(16.r),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -221,7 +216,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   label: 'Report Post',
                   color: NexoraColors.error,
                   onTap: () {
-                    Get.back();
+                    Navigator.of(context).pop();
                     _reportPost(post);
                   },
                 ),
@@ -232,16 +227,23 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 color: NexoraColors.textSecondary,
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: post.content));
-                  Get.back();
-                  Get.snackbar(
-                    'Copied to Clipboard',
-                    'Post text copied successfully',
-                    backgroundColor: NexoraColors.success.withOpacity(0.9),
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.TOP,
-                    margin: EdgeInsets.all(16.r),
-                    borderRadius: 12.r,
-                    icon: const Icon(Icons.check, color: Colors.white),
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.check, color: Colors.white),
+                          SizedBox(width: 8),
+                          const Text('Post text copied successfully'),
+                        ],
+                      ),
+                      backgroundColor: NexoraColors.success.withOpacity(0.9),
+                      behavior: SnackBarBehavior.floating,
+                      margin: EdgeInsets.all(16.r),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.r),
+                      ),
+                    ),
                   );
                 },
               ),
@@ -280,7 +282,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  void _editPost(PostModel post, int index) {
+  void _editPost(PostModel post) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -302,11 +304,10 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  void _confirmDeletePost(int index) {
-    final post = filteredPosts[index];
-
-    Get.dialog(
-      AlertDialog(
+  void _confirmDeletePost(PostModel post) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
         backgroundColor: Colors.transparent,
         contentPadding: EdgeInsets.zero,
         content: GlassContainer(
@@ -350,7 +351,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: () => Get.back(),
+                      onPressed: () => Navigator.of(context).pop(),
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.symmetric(vertical: 14.h),
                         shape: RoundedRectangleBorder(
@@ -377,20 +378,26 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                         ),
                       ),
                       onPressed: () async {
-                        Get.back();
+                        Navigator.of(context).pop();
                         await PostRepository.instance.deletePost(post.id);
-                        setState(() {
-                          _allPosts.removeWhere((p) => p.id == post.id);
-                        });
-                        Get.snackbar(
-                          'Post Deleted',
-                          'Your post has been removed',
-                          backgroundColor: NexoraColors.error.withOpacity(0.9),
-                          colorText: Colors.white,
-                          snackPosition: SnackPosition.TOP,
-                          margin: EdgeInsets.all(16.r),
-                          borderRadius: 12.r,
-                          icon: const Icon(Icons.delete, color: Colors.white),
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.delete, color: Colors.white),
+                                SizedBox(width: 8),
+                                const Text('Your post has been removed'),
+                              ],
+                            ),
+                            backgroundColor: NexoraColors.error.withOpacity(
+                              0.9,
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.all(16.r),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                            ),
+                          ),
                         );
                       },
                       child: Text('Delete', style: TextStyle(fontSize: 16.sp)),
@@ -406,8 +413,9 @@ class _BroadcastScreenState extends State<BroadcastScreen>
   }
 
   void _reportPost(PostModel post) {
-    Get.dialog(
-      AlertDialog(
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
         backgroundColor: Colors.transparent,
         contentPadding: EdgeInsets.zero,
         content: GlassContainer(
@@ -448,16 +456,19 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   padding: EdgeInsets.only(bottom: 8.h),
                   child: GestureDetector(
                     onTap: () {
-                      Get.back();
-                      Get.snackbar(
-                        'Report Submitted',
-                        'Thank you for helping keep our community safe',
-                        backgroundColor: NexoraColors.success.withOpacity(0.9),
-                        colorText: Colors.white,
-                        snackPosition: SnackPosition.TOP,
-                        margin: EdgeInsets.all(16.r),
-                        borderRadius: 12.r,
-                        duration: const Duration(seconds: 2),
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Report Submitted: $reason'),
+                          backgroundColor: NexoraColors.success.withOpacity(
+                            0.9,
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                          margin: EdgeInsets.all(16.r),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                        ),
                       );
                     },
                     child: Container(
@@ -486,7 +497,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               ),
               SizedBox(height: 8.h),
               TextButton(
-                onPressed: () => Get.back(),
+                onPressed: () => Navigator.of(context).pop(),
                 child: Text(
                   'Cancel',
                   style: TextStyle(
@@ -511,34 +522,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
         post: post,
         userName: _userName,
         userAvatar: _userAvatar,
-        onCommentAdded: (commentText) async {
-          final comment = CommentModel(
-            id: '',
-            userId: _userId,
-            user: _userName,
-            comment: commentText
-                .comment, // Assuming commentText is a CommentModel from UI
-            time: 'Just now',
-            createdAt: DateTime.now(),
-          );
-
-          final addedComment = await PostRepository.instance.addComment(
-            post.id,
-            comment,
-          );
-
-          setState(() {
-            final postIndex = _allPosts.indexWhere((p) => p.id == post.id);
-            if (postIndex != -1) {
-              final updatedComments = List<CommentModel>.from(
-                _allPosts[postIndex].commentsList,
-              )..add(addedComment);
-              _allPosts[postIndex] = _allPosts[postIndex].copyWith(
-                commentsList: updatedComments,
-                comments: _allPosts[postIndex].comments + 1,
-              );
-            }
-          });
+        onCommentAdded: (comment) async {
+          await PostRepository.instance.addComment(post.id, comment);
         },
       ),
     );
@@ -553,39 +538,40 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
 
     if (userProfile != null) {
-      Get.to(
-        () =>
-            ProfileViewScreen(profile: ProfileModel.fromUserData(userProfile)),
-        transition: Transition.rightToLeftWithFade,
-        duration: const Duration(milliseconds: 400),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ProfileViewScreen(
+            profile: ProfileModel.fromUserData(userProfile),
+          ),
+        ),
       );
     } else {
       // Fallback to minimal profile if user not found in DB (unlikely)
-      Get.to(
-        () => ProfileViewScreen(
-          profile: ProfileModel(
-            id: post.userId,
-            name: post.user,
-            email: '',
-            avatar: post.avatar,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ProfileViewScreen(
+            profile: ProfileModel(
+              id: post.userId,
+              name: post.user,
+              email: '',
+              avatar: post.avatar,
+            ),
           ),
         ),
-        transition: Transition.rightToLeftWithFade,
-        duration: const Duration(milliseconds: 400),
       );
     }
   }
 
   void _openImageViewer(List<String> images, int initialIndex, PostModel post) {
     HapticFeedback.lightImpact();
-    Get.to(
-      () => ImageViewerScreen(
-        images: images,
-        initialIndex: initialIndex,
-        post: post,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ImageViewerScreen(
+          images: images,
+          initialIndex: initialIndex,
+          post: post,
+        ),
       ),
-      transition: Transition.zoom,
-      duration: const Duration(milliseconds: 300),
     );
   }
 
@@ -597,180 +583,161 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Background gradient orbs
-          Positioned(
-            top: -100.h,
-            right: -100.w,
-            child: Container(
-              width: 300.r,
-              height: 300.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.2),
-                    Colors.transparent,
-                  ],
+    final postsAsync = ref.watch(postsStreamProvider);
+
+    return DarkBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            // Background Decor (similar to login but darker/premium)
+            Positioned(
+              top: -150.h,
+              right: -100.w,
+              child: Container(
+                width: 400.r,
+                height: 400.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: NexoraColors.primaryPurple.withOpacity(0.08),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            bottom: 150.h,
-            left: -80.w,
-            child: Container(
-              width: 250.r,
-              height: 250.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.romanticPink.withOpacity(0.12),
-                    Colors.transparent,
-                  ],
+            Positioned(
+              bottom: -100.h,
+              left: -150.w,
+              child: Container(
+                width: 450.r,
+                height: 450.r,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: NexoraColors.primaryPurple.withOpacity(0.05),
                 ),
               ),
             ),
-          ),
-          SafeArea(
-            child: RefreshIndicator(
-              onRefresh: _refreshFeed,
-              color: NexoraColors.primaryPurple,
-              backgroundColor: NexoraColors.midnightPurple,
-              displacement: 40.h,
-              edgeOffset: 20.h,
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  // Enhanced App Bar
-                  SliverAppBar(
-                    pinned: true,
-                    floating: true,
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
-                    flexibleSpace: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            NexoraColors.midnightDark.withOpacity(0.9),
-                            NexoraColors.midnightDark.withOpacity(0.7),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                    title: ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [
-                          NexoraColors.primaryPurple,
-                          NexoraColors.romanticPink,
-                        ],
-                      ).createShader(bounds),
-                      child: Text(
-                        'Feed',
-                        style: NexoraTextStyles.headline1.copyWith(
-                          fontSize: 28.sp,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.w,
-                        ),
-                      ),
-                    ),
-                    bottom: PreferredSize(
-                      // height must account for vertical padding (8 top + 16 bottom)
-                      // plus the 50px search bar, so total 74 to avoid overflow.
-                      preferredSize: Size.fromHeight(74.h),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
-                        child: _buildSearchBar(),
-                      ),
-                    ),
-                  ),
 
-                  SliverToBoxAdapter(child: SizedBox(height: 8.h)),
-
-                  // Trending Stories Section
-                  SliverToBoxAdapter(child: SizedBox(height: 8.h)),
-
-                  // Feed Header
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20.w),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(6.r),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  NexoraColors.primaryPurple.withOpacity(0.3),
-                                  NexoraColors.primaryPurple.withOpacity(0.1),
-                                ],
+            // Main Content
+            postsAsync.when(
+              data: (posts) {
+                final visiblePosts = _getFilteredPosts(posts);
+                return RefreshIndicator(
+                  onRefresh: _refreshFeed,
+                  color: NexoraColors.primaryPurple,
+                  backgroundColor: NexoraColors.midnightDark,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      SliverAppBar(
+                        expandedHeight: 140.h,
+                        floating: true,
+                        pinned: true,
+                        backgroundColor: Colors.transparent,
+                        elevation: 0,
+                        flexibleSpace: FlexibleSpaceBar(
+                          background: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 20.w),
+                                child: _buildSearchBar(),
                               ),
-                              borderRadius: BorderRadius.circular(8.r),
-                            ),
-                            child: Icon(
-                              Icons.grid_view_rounded,
-                              color: NexoraColors.primaryPurple,
-                              size: 18.r,
-                            ),
+                              SizedBox(height: 20.h),
+                            ],
                           ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Latest Updates',
-                            style: TextStyle(
-                              color: NexoraColors.textPrimary,
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        ),
+                        title: Text(
+                          'Nexora Feed',
+                          style: TextStyle(
+                            fontSize: 28.sp,
+                            fontWeight: FontWeight.bold,
+                            foreground: Paint()
+                              ..shader = NexoraGradients.logoGradient
+                                  .createShader(
+                                    const Rect.fromLTWH(0.0, 0.0, 200.0, 70.0),
+                                  ),
                           ),
-                          const Spacer(),
-                          Text(
-                            '${filteredPosts.length} posts',
-                            style: TextStyle(
-                              color: NexoraColors.textMuted,
-                              fontSize: 12.sp,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      if (visiblePosts.isEmpty && _searchQuery.isNotEmpty)
+                        SliverFillRemaining(child: _buildEmptySearch())
+                      else
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 100.h),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              final post = visiblePosts[index];
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: 20.h),
+                                child: TweenAnimationBuilder(
+                                  tween: Tween<double>(begin: 0, end: 1),
+                                  duration: Duration(
+                                    milliseconds: 500 + (index * 100),
+                                  ),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, double value, child) {
+                                    return Opacity(
+                                      opacity: value,
+                                      child: Transform.translate(
+                                        offset: Offset(0, 30.h * (1 - value)),
+                                        child: _buildPostCard(post),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            }, childCount: visiblePosts.length),
+                          ),
+                        ),
+                    ],
                   ),
-
-                  SliverToBoxAdapter(child: SizedBox(height: 16.h)),
-
-                  // Feed
-                  SliverToBoxAdapter(
-                    child: AnimatedBuilder(
-                      animation: _refreshController,
-                      builder: (context, _) => _buildFeed(),
+                );
+              },
+              loading: () => const Center(
+                child: CircularProgressIndicator(
+                  color: NexoraColors.primaryPurple,
+                ),
+              ),
+              error: (e, st) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: NexoraColors.error,
+                      size: 64.r,
                     ),
-                  ),
-
-                  SliverToBoxAdapter(child: SizedBox(height: 80.h)),
-                ],
+                    SizedBox(height: 16.h),
+                    Text(
+                      'Error loading feed: $e',
+                      style: TextStyle(color: Colors.white70, fontSize: 16.sp),
+                    ),
+                    SizedBox(height: 20.h),
+                    ElevatedButton(
+                      onPressed: () => ref.invalidate(postsStreamProvider),
+                      child: const Text('Try Again'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createPost,
-        backgroundColor: NexoraColors.primaryPurple,
-        elevation: 8.r,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30.r),
+          ],
         ),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Create Post',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _createPost,
+          backgroundColor: NexoraColors.primaryPurple,
+          elevation: 8.r,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30.r),
+          ),
+          icon: const Icon(Icons.add, color: Colors.white),
+          label: const Text(
+            'Create Post',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
         ),
       ),
     );
@@ -845,54 +812,6 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
-  Widget _buildFeed() {
-    final displayPosts = filteredPosts;
-
-    if (_isLoading) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(40.r),
-          child: CircularProgressIndicator(
-            valueColor: const AlwaysStoppedAnimation(
-              NexoraColors.primaryPurple,
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (displayPosts.isEmpty && _searchQuery.isNotEmpty) {
-      return _buildEmptySearch();
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.symmetric(horizontal: 20.w),
-      itemCount: displayPosts.length,
-      itemBuilder: (context, index) {
-        final post = displayPosts[index];
-        return Padding(
-          padding: EdgeInsets.only(bottom: 20.h),
-          child: TweenAnimationBuilder(
-            tween: Tween<double>(begin: 0, end: 1),
-            duration: Duration(milliseconds: 500 + (index * 100)),
-            curve: Curves.easeOutCubic,
-            builder: (context, double value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.translate(
-                  offset: Offset(0, 30.h * (1 - value)),
-                  child: _buildPostCard(post, index),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildEmptySearch() {
     return Center(
       child: Padding(
@@ -948,6 +867,11 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     );
   }
 
+  bool _isValidUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    return url.startsWith('http');
+  }
+
   String _getTimeAgo(DateTime dateTime) {
     final duration = DateTime.now().difference(dateTime);
     if (duration.inDays > 7) {
@@ -963,9 +887,27 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     }
   }
 
-  Widget _buildPostCard(PostModel post, int index) {
+  Widget _buildAvatarPlaceholder(String name, {double size = 20}) {
+    String initial = '?';
+    if (name.isNotEmpty) {
+      String cleanName = name.startsWith('@') ? name.substring(1) : name;
+      if (cleanName.isNotEmpty) {
+        initial = cleanName[0].toUpperCase();
+      }
+    }
+    return Text(
+      initial,
+      style: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        fontSize: size.sp,
+      ),
+    );
+  }
+
+  Widget _buildPostCard(PostModel post) {
     return GestureDetector(
-      onDoubleTap: () => _toggleLike(index),
+      onDoubleTap: () => _toggleLike(post),
       child: GlassContainer(
         borderRadius: 24.r,
         padding: EdgeInsets.all(16.r),
@@ -977,8 +919,12 @@ class _BroadcastScreenState extends State<BroadcastScreen>
               future: AuthRepository.instance.getUserProfile(post.userId),
               builder: (context, snapshot) {
                 final author = snapshot.data;
-                final displayName = author?.displayName ?? post.displayName;
-                final avatar = author?.avatar ?? post.avatar;
+                final displayName = (author?.displayName?.isNotEmpty == true)
+                    ? author!.displayName
+                    : post.displayName;
+                final avatar = (author?.avatar?.isNotEmpty == true)
+                    ? author!.avatar!
+                    : post.avatar;
 
                 return Row(
                   children: [
@@ -1005,7 +951,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                             child: Center(
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(15.r),
-                                child: avatar.isNotEmpty
+                                child: _isValidUrl(avatar)
                                     ? Image.network(
                                         avatar,
                                         width: 50.w,
@@ -1013,23 +959,11 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                                         fit: BoxFit.cover,
                                         errorBuilder:
                                             (context, error, stackTrace) =>
-                                                Text(
-                                                  displayName[0].toUpperCase(),
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 20.sp,
-                                                  ),
+                                                _buildAvatarPlaceholder(
+                                                  displayName,
                                                 ),
                                       )
-                                    : Text(
-                                        displayName[0].toUpperCase(),
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20.sp,
-                                        ),
-                                      ),
+                                    : _buildAvatarPlaceholder(displayName),
                               ),
                             ),
                           ),
@@ -1143,7 +1077,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                         icon: const Icon(Icons.more_vert),
                         color: NexoraColors.textMuted,
                         iconSize: 20.r,
-                        onPressed: () => _showPostOptions(post, index),
+                        onPressed: () => _showPostOptions(post),
                       ),
                     ),
                   ],
@@ -1236,7 +1170,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                           ? NexoraColors.romanticPink
                           : NexoraColors.textMuted,
                       post.likes.toString(),
-                      () => _toggleLike(index),
+                      () => _toggleLike(post),
                     ),
                     SizedBox(width: 20.w),
                     _buildStatIcon(
@@ -1255,7 +1189,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   ],
                 ),
                 GestureDetector(
-                  onTap: () => _toggleSave(index),
+                  onTap: () => _toggleSave(post),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: EdgeInsets.all(8.r),
@@ -1301,15 +1235,26 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                           shape: BoxShape.circle,
                         ),
                         child: Center(
-                          child: Text(
-                            post.commentsList[commentIndex].displayName[0]
-                                .toUpperCase(),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isValidUrl(comment.avatar)
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(14.w),
+                                  child: Image.network(
+                                    comment.avatar,
+                                    width: 28.w,
+                                    height: 28.w,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            _buildAvatarPlaceholder(
+                                              comment.displayName,
+                                              size: 11,
+                                            ),
+                                  ),
+                                )
+                              : _buildAvatarPlaceholder(
+                                  comment.displayName,
+                                  size: 11,
+                                ),
                         ),
                       ),
                       SizedBox(width: 10.w),
@@ -1456,10 +1401,8 @@ class _BroadcastScreenState extends State<BroadcastScreen>
             final bool isSelected = userVote == i;
 
             return GestureDetector(
-              onTap: userVote == null
-                  ? () =>
-                        PostRepository.instance.voteInPoll(post.id, i, _userId)
-                  : null,
+              onTap: () =>
+                  PostRepository.instance.voteInPoll(post.id, i, _userId),
               child: Container(
                 margin: EdgeInsets.only(bottom: 8.h),
                 child: Stack(
@@ -1741,7 +1684,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   "Direct",
                   NexoraColors.primaryPurple,
                   () {
-                    Get.back();
+                    Navigator.of(context).pop();
                     _shareToDirect(post);
                   },
                 ),
@@ -1750,7 +1693,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   "Campus",
                   NexoraColors.romanticPink,
                   () {
-                    Get.back();
+                    Navigator.of(context).pop();
                     _shareToCampus(post);
                   },
                 ),
@@ -1759,7 +1702,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   "Copy",
                   NexoraColors.accentCyan,
                   () {
-                    Get.back();
+                    Navigator.of(context).pop();
                     _copyToClipboard(post);
                   },
                 ),
@@ -1768,7 +1711,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
                   "More",
                   NexoraColors.textMuted,
                   () {
-                    Get.back();
+                    Navigator.of(context).pop();
                     _shareMore(post);
                   },
                 ),
@@ -1854,44 +1797,32 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 
   void _shareToDirect(PostModel post) {
     HapticFeedback.lightImpact();
-    Get.snackbar(
-      'Share',
-      'Select a contact to share with',
-      backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 2),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Select a contact to share with'),
+        backgroundColor: NexoraColors.primaryPurple.withOpacity(0.9),
+      ),
     );
   }
 
   void _shareToCampus(PostModel post) {
     HapticFeedback.lightImpact();
-    Get.snackbar(
-      'Shared to Campus!',
-      'Your post is now visible to the campus community',
-      backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 2),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Your post is now visible to the campus community'),
+        backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
+      ),
     );
   }
 
   void _copyToClipboard(PostModel post) {
     Clipboard.setData(ClipboardData(text: post.content));
     HapticFeedback.lightImpact();
-    Get.snackbar(
-      'Copied!',
-      'Post content copied to clipboard',
-      backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 1),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Post content copied to clipboard'),
+        backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
+      ),
     );
   }
 
@@ -1907,7 +1838,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
     final color = NexoraColors.primaryPurple;
     return GestureDetector(
       onTap: () async {
-        Get.back();
+        Navigator.of(context).pop();
         HapticFeedback.lightImpact();
 
         // Find or create chat
@@ -1925,15 +1856,11 @@ class _BroadcastScreenState extends State<BroadcastScreen>
           chatId: chatId,
         );
 
-        Get.snackbar(
-          'Shared!',
-          'Post shared with ${user.name}',
-          backgroundColor: color.withOpacity(0.9),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 1),
-          margin: EdgeInsets.all(16.r),
-          borderRadius: 12.r,
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Post shared with ${user.name}'),
+            backgroundColor: color.withOpacity(0.9),
+          ),
         );
       },
       child: Container(
@@ -2040,7 +1967,7 @@ class _BroadcastScreenState extends State<BroadcastScreen>
 }
 
 // Create Post Sheet (Enhanced)
-class CreatePostSheet extends StatefulWidget {
+class CreatePostSheet extends ConsumerStatefulWidget {
   final Function(PostModel)? onPostCreated;
   final String? userName;
   final String? userAvatar;
@@ -2057,10 +1984,10 @@ class CreatePostSheet extends StatefulWidget {
   });
 
   @override
-  State<CreatePostSheet> createState() => _CreatePostSheetState();
+  ConsumerState<CreatePostSheet> createState() => _CreatePostSheetState();
 }
 
-class _CreatePostSheetState extends State<CreatePostSheet>
+class _CreatePostSheetState extends ConsumerState<CreatePostSheet>
     with SingleTickerProviderStateMixin {
   late TextEditingController _postController;
   final FocusNode _focusNode = FocusNode();
@@ -2106,12 +2033,16 @@ class _CreatePostSheetState extends State<CreatePostSheet>
           _selectedImages.addAll(images.map((img) => img.path));
           if (_selectedImages.length > 4) {
             _selectedImages.removeRange(4, _selectedImages.length);
-            Get.snackbar('Limit reached', 'You can select up to 4 images');
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('You can select up to 4 images')),
+            );
           }
         });
       }
     } catch (e) {
-      Get.snackbar('Error', 'Failed to pick images');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to pick images')));
     }
   }
 
@@ -2123,8 +2054,9 @@ class _CreatePostSheetState extends State<CreatePostSheet>
         ? [TextEditingController(), TextEditingController()]
         : _pollOptions.map((opt) => TextEditingController(text: opt)).toList();
 
-    Get.dialog(
-      StatefulBuilder(
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
             backgroundColor: Colors.transparent,
@@ -2200,7 +2132,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: () => Get.back(),
+                        onPressed: () => Navigator.of(context).pop(),
                         child: Text(
                           'Cancel',
                           style: TextStyle(color: NexoraColors.textMuted),
@@ -2216,9 +2148,10 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                               optionControllers.any(
                                 (c) => c.text.trim().isEmpty,
                               )) {
-                            Get.snackbar(
-                              'Empty fields',
-                              'Please fill all poll fields',
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please fill all poll fields'),
+                              ),
                             );
                             return;
                           }
@@ -2229,7 +2162,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                               optionControllers.map((c) => c.text.trim()),
                             );
                           });
-                          Get.back();
+                          Navigator.of(context).pop();
                         },
                         child: Text('Done'),
                       ),
@@ -2257,9 +2190,11 @@ class _CreatePostSheetState extends State<CreatePostSheet>
       'Celebrating': '🥳',
     };
 
-    Get.bottomSheet(
-      GlassContainer(
-        borderRadius: 30, // Fixed: expecting double
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GlassContainer(
+        borderRadius: 30.r,
         padding: EdgeInsets.all(20.r),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2280,7 +2215,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                         setState(() {
                           _selectedFeeling = '${f.value} ${f.key}';
                         });
-                        Get.back();
+                        Navigator.of(context).pop();
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(
@@ -2363,7 +2298,9 @@ class _CreatePostSheetState extends State<CreatePostSheet>
         userId: fb.FirebaseAuth.instance.currentUser?.uid ?? '',
         user: widget.userName ?? 'You',
         username: username,
-        avatar: widget.userAvatar ?? (widget.userName ?? 'U')[0],
+        avatar: widget.userAvatar?.startsWith('http') == true
+            ? widget.userAvatar!
+            : 'https://api.dicebear.com/7.x/avataaars/png?seed=${widget.userName ?? 'User'}',
         time:
             'Just now', // Keep for compatibility if needed, but we'll use createdAt
         content: content,
@@ -2391,24 +2328,19 @@ class _CreatePostSheetState extends State<CreatePostSheet>
         await widget.onPostCreated!(postModel);
       }
 
-      Get.back();
+      Navigator.of(context).pop();
       HapticFeedback.mediumImpact();
 
-      Get.snackbar(
-        widget.isEditing ? 'Post Updated!' : 'Post Created!',
-        widget.isEditing
-            ? 'Your post has been updated successfully'
-            : 'Your post is now live on the campus feed',
-        backgroundColor: NexoraColors.success.withOpacity(0.9),
-        colorText: Colors.white,
-        snackPosition: SnackPosition.TOP,
-        duration: const Duration(seconds: 2),
-        margin: EdgeInsets.all(16.r),
-        borderRadius: 12.r,
-        icon: const Icon(Icons.check_circle, color: Colors.white),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.isEditing ? 'Post Updated!' : 'Post Created!'),
+          backgroundColor: NexoraColors.success.withOpacity(0.9),
+        ),
       );
     } catch (e) {
-      Get.snackbar('Error', 'Failed to create post: $e');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to create post: $e')));
     } finally {
       if (mounted) setState(() => _isPosting = false);
     }
@@ -2425,13 +2357,17 @@ class _CreatePostSheetState extends State<CreatePostSheet>
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
+      padding: EdgeInsets.only(bottom: 0),
       decoration: BoxDecoration(
         gradient: NexoraGradients.mainBackground,
         borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
         border: Border.all(color: NexoraColors.primaryPurple.withOpacity(0.3)),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Enhanced Header
           Padding(
@@ -2450,7 +2386,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
                 Row(
                   children: [
                     IconButton(
-                      onPressed: () => Get.back(),
+                      onPressed: () => Navigator.of(context).pop(),
                       icon: Container(
                         padding: EdgeInsets.all(4.r),
                         decoration: BoxDecoration(
@@ -2547,409 +2483,421 @@ class _CreatePostSheetState extends State<CreatePostSheet>
             ),
           ),
 
-          // User info with enhanced visibility picker
-          Obx(() {
-            final profile = AuthRepository.instance.currentUserProfile;
-            final displayName =
-                profile?.displayName ?? widget.userName ?? 'You';
-            final avatar = profile?.avatar;
-
-            String getInitial(String name) {
-              if (name.isEmpty) return 'U';
-              return name.startsWith('@')
-                  ? name[1].toUpperCase()
-                  : name[0].toUpperCase();
-            }
-
-            return Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: Row(
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
                 children: [
-                  Container(
-                    width: 52.w,
-                    height: 52.w,
-                    decoration: BoxDecoration(
-                      gradient: NexoraGradients.primaryButton,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: NexoraColors.primaryPurple.withOpacity(0.3),
-                          blurRadius: 8.r,
-                          spreadRadius: 1.r,
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: ClipOval(
-                        child: (avatar != null && avatar.isNotEmpty)
-                            ? Image.network(
-                                avatar,
-                                width: 52.w,
-                                height: 52.w,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Center(
-                                      child: Text(
-                                        getInitial(displayName),
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 22.sp,
+                  // User info with enhanced visibility picker
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final profile = ref.watch(currentUserProvider);
+                      final displayName =
+                          profile?.displayName ?? widget.userName ?? 'You';
+                      final avatar = profile?.avatar;
+
+                      String getInitial(String name) {
+                        if (name.isEmpty) return 'U';
+                        return name.startsWith('@')
+                            ? name[1].toUpperCase()
+                            : name[0].toUpperCase();
+                      }
+
+                      return Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.w),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 52.w,
+                              height: 52.w,
+                              decoration: BoxDecoration(
+                                gradient: NexoraGradients.primaryButton,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: NexoraColors.primaryPurple
+                                        .withOpacity(0.3),
+                                    blurRadius: 8.r,
+                                    spreadRadius: 1.r,
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: ClipOval(
+                                  child: (avatar != null && avatar.isNotEmpty)
+                                      ? Image.network(
+                                          avatar,
+                                          width: 52.w,
+                                          height: 52.w,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Center(
+                                                    child: Text(
+                                                      getInitial(displayName),
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 22.sp,
+                                                      ),
+                                                    ),
+                                                  ),
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            getInitial(displayName),
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 22.sp,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    displayName,
+                                    style: TextStyle(
+                                      color: NexoraColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 17.sp,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4.h),
+                                  GestureDetector(
+                                    onTap: _showVisibilityPicker,
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 10.w,
+                                        vertical: 6.h,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: NexoraColors.glassBackground,
+                                        borderRadius: BorderRadius.circular(
+                                          20.r,
+                                        ),
+                                        border: Border.all(
+                                          color: NexoraColors.primaryPurple
+                                              .withOpacity(0.3),
                                         ),
                                       ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _visibility == 'Public'
+                                                ? Icons.public
+                                                : _visibility == 'Campus'
+                                                ? Icons.school
+                                                : Icons.lock,
+                                            size: 14.r,
+                                            color: NexoraColors.accentCyan,
+                                          ),
+                                          SizedBox(width: 6.w),
+                                          Text(
+                                            _visibility,
+                                            style: TextStyle(
+                                              color: NexoraColors.textSecondary,
+                                              fontSize: 13.sp,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          SizedBox(width: 4.w),
+                                          Icon(
+                                            Icons.arrow_drop_down,
+                                            size: 16.r,
+                                            color: NexoraColors.textMuted,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                              )
-                            : Center(
-                                child: Text(
-                                  getInitial(displayName),
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 22.sp,
                                   ),
-                                ),
+                                ],
                               ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName,
-                          style: TextStyle(
-                            color: NexoraColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17.sp,
-                          ),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: 4.h),
-                        GestureDetector(
-                          onTap: _showVisibilityPicker,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 10.w,
-                              vertical: 6.h,
+                      );
+                    },
+                  ),
+                  SizedBox(height: 16.h),
+                  Padding(
+                    padding: EdgeInsets.all(16.r),
+                    child: GlassContainer(
+                      borderRadius: 20.r,
+                      padding: EdgeInsets.all(16.r),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: _postController,
+                            focusNode: _focusNode,
+                            maxLines: null,
+                            textCapitalization: TextCapitalization.sentences,
+                            style: TextStyle(
+                              color: NexoraColors.textPrimary,
+                              fontSize: 16.sp,
+                              height: 1.4,
                             ),
-                            decoration: BoxDecoration(
-                              color: NexoraColors.glassBackground,
-                              borderRadius: BorderRadius.circular(20.r),
-                              border: Border.all(
-                                color: NexoraColors.primaryPurple.withOpacity(
-                                  0.3,
+                            decoration: InputDecoration(
+                              hintText:
+                                  "What's on your mind? Share with the campus community...",
+                              hintStyle: TextStyle(
+                                color: NexoraColors.textMuted,
+                                fontSize: 15.sp,
+                              ),
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          SizedBox(height: 8.h),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Add hashtags to reach more people',
+                                style: TextStyle(
+                                  color: NexoraColors.textMuted,
+                                  fontSize: 11.sp,
                                 ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _visibility == 'Public'
-                                      ? Icons.public
-                                      : _visibility == 'Campus'
-                                      ? Icons.school
-                                      : Icons.lock,
-                                  size: 14.r,
-                                  color: NexoraColors.accentCyan,
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 10.w,
+                                  vertical: 4.h,
                                 ),
-                                SizedBox(width: 6.w),
-                                Text(
-                                  _visibility,
+                                decoration: BoxDecoration(
+                                  color: _postController.text.length > 500
+                                      ? NexoraColors.error.withOpacity(0.1)
+                                      : NexoraColors.glassBackground,
+                                  borderRadius: BorderRadius.circular(12.r),
+                                ),
+                                child: Text(
+                                  '${_postController.text.length}/500',
                                   style: TextStyle(
-                                    color: NexoraColors.textSecondary,
-                                    fontSize: 13.sp,
+                                    color: _postController.text.length > 500
+                                        ? NexoraColors.error
+                                        : NexoraColors.textMuted,
+                                    fontSize: 12.sp,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                SizedBox(width: 4.w),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Selected Images Preview
+                  if (_selectedImages.isNotEmpty)
+                    Container(
+                      height: 120.h,
+                      padding: EdgeInsets.symmetric(horizontal: 16.w),
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _selectedImages.length,
+                        itemBuilder: (context, index) {
+                          return Stack(
+                            children: [
+                              Container(
+                                margin: EdgeInsets.only(right: 12.w, top: 8.h),
+                                width: 100.w,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12.r),
+                                  image: DecorationImage(
+                                    image: FileImage(
+                                      File(_selectedImages[index]),
+                                    ),
+                                    fit: BoxFit.cover,
+                                  ),
+                                  border: Border.all(
+                                    color: NexoraColors.primaryPurple
+                                        .withOpacity(0.3),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                right: 4.w,
+                                top: 0,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedImages.removeAt(index);
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.all(4.r),
+                                    decoration: const BoxDecoration(
+                                      color: NexoraColors.error,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 14.r,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+
+                  // Poll Preview
+                  if (_pollQuestion != null)
+                    Padding(
+                      padding: EdgeInsets.all(16.r),
+                      child: GlassContainer(
+                        borderRadius: 16.r,
+                        padding: EdgeInsets.all(12.r),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
                                 Icon(
-                                  Icons.arrow_drop_down,
-                                  size: 16.r,
-                                  color: NexoraColors.textMuted,
+                                  Icons.poll_outlined,
+                                  color: NexoraColors.primaryPurple,
+                                  size: 20.r,
+                                ),
+                                SizedBox(width: 8.w),
+                                Expanded(
+                                  child: Text(
+                                    _pollQuestion!,
+                                    style: TextStyle(
+                                      color: NexoraColors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15.sp,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _pollQuestion = null;
+                                      _pollOptions.clear();
+                                    });
+                                  },
+                                  icon: Icon(
+                                    Icons.close,
+                                    color: NexoraColors.textMuted,
+                                    size: 18.r,
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
+                            ..._pollOptions.map(
+                              (opt) => Container(
+                                margin: EdgeInsets.only(top: 8.h),
+                                padding: EdgeInsets.all(10.r),
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(10.r),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.1),
+                                  ),
+                                ),
+                                child: Text(
+                                  opt,
+                                  style: TextStyle(
+                                    color: NexoraColors.textSecondary,
+                                    fontSize: 13.sp,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
+                    ),
+
+                  // Quick hashtags with improved design
+                  Container(
+                    height: 45.h,
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _availableHashtags.length,
+                      itemBuilder: (context, index) {
+                        final hashtag = _availableHashtags[index];
+                        final isSelected = _postController.text.contains(
+                          hashtag,
+                        );
+                        return GestureDetector(
+                          onTap: () => _addHashtag(hashtag),
+                          child: Container(
+                            margin: EdgeInsets.only(right: 8.w),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 14.w,
+                              vertical: 8.h,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: isSelected
+                                  ? LinearGradient(
+                                      colors: [
+                                        NexoraColors.primaryPurple,
+                                        NexoraColors.deepPurple,
+                                      ],
+                                    )
+                                  : null,
+                              color: isSelected
+                                  ? null
+                                  : NexoraColors.glassBackground,
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.transparent
+                                    : NexoraColors.glassBorder,
+                              ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: NexoraColors.primaryPurple
+                                            .withOpacity(0.3),
+                                        blurRadius: 8.r,
+                                        spreadRadius: 1.r,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              hashtag,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : NexoraColors.textSecondary,
+                                fontSize: 13.sp,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
-            );
-          }),
-
-          // Post content with character count
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.all(16.r),
-              child: GlassContainer(
-                borderRadius: 20.r,
-                padding: EdgeInsets.all(16.r),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _postController,
-                        focusNode: _focusNode,
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                        style: TextStyle(
-                          color: NexoraColors.textPrimary,
-                          fontSize: 16.sp,
-                          height: 1.4,
-                        ),
-                        decoration: InputDecoration(
-                          hintText:
-                              "What's on your mind? Share with the campus community...",
-                          hintStyle: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 15.sp,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    SizedBox(height: 8.h),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Add hashtags to reach more people',
-                          style: TextStyle(
-                            color: NexoraColors.textMuted,
-                            fontSize: 11.sp,
-                          ),
-                        ),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 10.w,
-                            vertical: 4.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _postController.text.length > 500
-                                ? NexoraColors.error.withOpacity(0.1)
-                                : NexoraColors.glassBackground,
-                            borderRadius: BorderRadius.circular(12.r),
-                          ),
-                          child: Text(
-                            '${_postController.text.length}/500',
-                            style: TextStyle(
-                              color: _postController.text.length > 500
-                                  ? NexoraColors.error
-                                  : NexoraColors.textMuted,
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Selected Images Preview
-          if (_selectedImages.isNotEmpty)
-            Container(
-              height: 120.h,
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _selectedImages.length,
-                itemBuilder: (context, index) {
-                  return Stack(
-                    children: [
-                      Container(
-                        margin: EdgeInsets.only(right: 12.w, top: 8.h),
-                        width: 100.w,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12.r),
-                          image: DecorationImage(
-                            image: FileImage(File(_selectedImages[index])),
-                            fit: BoxFit.cover,
-                          ),
-                          border: Border.all(
-                            color: NexoraColors.primaryPurple.withOpacity(0.3),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 4.w,
-                        top: 0,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedImages.removeAt(index);
-                            });
-                          },
-                          child: Container(
-                            padding: EdgeInsets.all(4.r),
-                            decoration: const BoxDecoration(
-                              color: NexoraColors.error,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 14.r,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-
-          // Poll Preview
-          if (_pollQuestion != null)
-            Padding(
-              padding: EdgeInsets.all(16.r),
-              child: GlassContainer(
-                borderRadius: 16.r,
-                padding: EdgeInsets.all(12.r),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.poll_outlined,
-                          color: NexoraColors.primaryPurple,
-                          size: 20.r,
-                        ),
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: Text(
-                            _pollQuestion!,
-                            style: TextStyle(
-                              color: NexoraColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15.sp,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _pollQuestion = null;
-                              _pollOptions.clear();
-                            });
-                          },
-                          icon: Icon(
-                            Icons.close,
-                            color: NexoraColors.textMuted,
-                            size: 18.r,
-                          ),
-                        ),
-                      ],
-                    ),
-                    ..._pollOptions.map(
-                      (opt) => Container(
-                        margin: EdgeInsets.only(top: 8.h),
-                        padding: EdgeInsets.all(10.r),
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(10.r),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                        ),
-                        child: Text(
-                          opt,
-                          style: TextStyle(
-                            color: NexoraColors.textSecondary,
-                            fontSize: 13.sp,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Quick hashtags with improved design
-          Container(
-            height: 45.h,
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _availableHashtags.length,
-              itemBuilder: (context, index) {
-                final hashtag = _availableHashtags[index];
-                final isSelected = _postController.text.contains(hashtag);
-                return GestureDetector(
-                  onTap: () => _addHashtag(hashtag),
-                  child: Container(
-                    margin: EdgeInsets.only(right: 8.w),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 14.w,
-                      vertical: 8.h,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: isSelected
-                          ? LinearGradient(
-                              colors: [
-                                NexoraColors.primaryPurple,
-                                NexoraColors.deepPurple,
-                              ],
-                            )
-                          : null,
-                      color: isSelected ? null : NexoraColors.glassBackground,
-                      borderRadius: BorderRadius.circular(20.r),
-                      border: Border.all(
-                        color: isSelected
-                            ? Colors.transparent
-                            : NexoraColors.glassBorder,
-                      ),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: NexoraColors.primaryPurple.withOpacity(
-                                  0.3,
-                                ),
-                                blurRadius: 8.r,
-                                spreadRadius: 1.r,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      hashtag,
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : NexoraColors.textSecondary,
-                        fontSize: 13.sp,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    ),
-                  ),
-                );
-              },
             ),
           ),
           SizedBox(height: 12.h),
 
           // Enhanced bottom action bar
           Container(
-            padding: EdgeInsets.only(
-              left: 16.w,
-              right: 16.w,
-              top: 16.h,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 16.h,
-            ),
+            padding: EdgeInsets.all(16.r),
             decoration: BoxDecoration(
               color: NexoraColors.midnightDark.withOpacity(0.95),
               border: Border(
@@ -3001,15 +2949,11 @@ class _CreatePostSheetState extends State<CreatePostSheet>
         } else if (label == 'Feeling') {
           _showFeelingPicker();
         } else {
-          Get.snackbar(
-            'Coming Soon',
-            'The $label feature is under development',
-            backgroundColor: color.withOpacity(0.9),
-            colorText: Colors.white,
-            snackPosition: SnackPosition.TOP,
-            duration: const Duration(seconds: 1),
-            margin: EdgeInsets.all(16.r),
-            borderRadius: 12.r,
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('The $label feature is under development'),
+              backgroundColor: color.withOpacity(0.9),
+            ),
           );
         }
       },
@@ -3039,8 +2983,9 @@ class _CreatePostSheetState extends State<CreatePostSheet>
   }
 
   void _showVisibilityPicker() {
-    Get.bottomSheet(
-      Container(
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
         padding: EdgeInsets.all(20.r),
         decoration: BoxDecoration(
           gradient: NexoraGradients.mainBackground,
@@ -3074,7 +3019,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
               _visibility == 'Public',
               () {
                 setState(() => _visibility = 'Public');
-                Get.back();
+                Navigator.of(context).pop();
               },
             ),
             _buildVisibilityOption(
@@ -3084,7 +3029,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
               _visibility == 'Campus',
               () {
                 setState(() => _visibility = 'Campus');
-                Get.back();
+                Navigator.of(context).pop();
               },
             ),
             _buildVisibilityOption(
@@ -3094,7 +3039,7 @@ class _CreatePostSheetState extends State<CreatePostSheet>
               _visibility == 'Friends',
               () {
                 setState(() => _visibility = 'Friends');
-                Get.back();
+                Navigator.of(context).pop();
               },
             ),
             const SizedBox(height: 16),
@@ -3243,27 +3188,29 @@ class _CommentsSheetState extends State<CommentsSheet> {
       createdAt: DateTime.now(),
     );
 
-    setState(() {
-      _comments.insert(0, newComment);
-      _isSubmitting = false;
-    });
-
+    // If onCommentAdded is provided, it's expected to handle the actual persistence
+    // and potentially update the parent widget's state, which would then rebuild
+    // this CommentsSheet with the updated post.commentsList.
+    // So, we don't optimistically add to _comments here if a callback is provided.
     if (widget.onCommentAdded != null) {
       widget.onCommentAdded!(newComment);
+    } else {
+      // If no callback, we update locally.
+      _comments.insert(0, newComment);
     }
+
+    setState(() {
+      _isSubmitting = false;
+    });
 
     _commentController.clear();
     HapticFeedback.lightImpact();
 
-    Get.snackbar(
-      'Comment Added',
-      'Your comment was posted successfully',
-      backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 1),
-      margin: EdgeInsets.all(16.r),
-      borderRadius: 12.r,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Your comment was posted successfully'),
+        backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
+      ),
     );
   }
 
@@ -3341,7 +3288,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           size: 20.r,
                         ),
                       ),
-                      onPressed: () => Get.back(),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
@@ -3766,12 +3713,10 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
   }
 
   void _doubleTapLike() {
-    if (!widget.post.likedBy.contains(ChatRepository.instance.currentUserId!)) {
-      PostRepository.instance.toggleLike(
-        widget.post.id,
-        ChatRepository.instance.currentUserId!,
-      );
-    }
+    PostRepository.instance.likePost(
+      widget.post.id,
+      ChatRepository.instance.currentUserId!,
+    );
     _likeAnimationController.forward().then(
       (_) => _likeAnimationController.reverse(),
     );
@@ -3795,7 +3740,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
             ),
             child: Icon(Icons.close, color: Colors.white, size: 22.r),
           ),
-          onPressed: () => Get.back(),
+          onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
@@ -4007,14 +3952,13 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                           widget.post.id,
                           ChatRepository.instance.currentUserId!,
                         );
-                        Get.snackbar(
-                          'Saved',
-                          'Post saved successfully',
-                          backgroundColor: NexoraColors.success.withOpacity(
-                            0.9,
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Post saved successfully'),
+                            backgroundColor: NexoraColors.success.withOpacity(
+                              0.9,
+                            ),
                           ),
-                          colorText: Colors.white,
-                          snackPosition: SnackPosition.TOP,
                         );
                       },
                     ),
@@ -4026,13 +3970,12 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                         Clipboard.setData(
                           ClipboardData(text: widget.images[_currentIndex]),
                         );
-                        Get.snackbar(
-                          'Shared',
-                          'Link copied to clipboard',
-                          backgroundColor: NexoraColors.primaryPurple
-                              .withOpacity(0.9),
-                          colorText: Colors.white,
-                          snackPosition: SnackPosition.TOP,
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Link copied to clipboard'),
+                            backgroundColor: NexoraColors.primaryPurple
+                                .withOpacity(0.9),
+                          ),
                         );
                       },
                     ),
@@ -4112,8 +4055,10 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
   }
 
   void _showImageOptions() {
-    Get.bottomSheet(
-      Container(
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
         padding: EdgeInsets.all(20.r),
         decoration: BoxDecoration(
           gradient: NexoraGradients.mainBackground,
@@ -4137,13 +4082,12 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                 'Save to device',
                 NexoraColors.accentCyan,
                 () {
-                  Get.back();
-                  Get.snackbar(
-                    'Saved',
-                    'Image saved to your device',
-                    backgroundColor: NexoraColors.success.withOpacity(0.9),
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.TOP,
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Image saved to your device'),
+                      backgroundColor: NexoraColors.success.withOpacity(0.9),
+                    ),
                   );
                 },
               ),
@@ -4152,7 +4096,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                 'Share image',
                 NexoraColors.primaryPurple,
                 () {
-                  Get.back();
+                  Navigator.of(context).pop();
                 },
               ),
               _buildOptionItem(
@@ -4160,18 +4104,12 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                 'Copy image link',
                 NexoraColors.romanticPink,
                 () {
-                  Get.back();
-                  Clipboard.setData(
-                    ClipboardData(text: widget.images[_currentIndex]),
-                  );
-                  Get.snackbar(
-                    'Copied',
-                    'Image link copied to clipboard',
-                    backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
-                    colorText: Colors.white,
-                    snackPosition: SnackPosition.TOP,
-                    margin: EdgeInsets.all(16.r),
-                    borderRadius: 12.r,
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Image link copied to clipboard'),
+                      backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
+                    ),
                   );
                 },
               ),
@@ -4180,7 +4118,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                 'Report image',
                 NexoraColors.error,
                 () {
-                  Get.back();
+                  Navigator.of(context).pop();
                 },
               ),
             ],

@@ -14,10 +14,10 @@ import 'modules/chat/repositories/chat_repository.dart';
 import 'modules/discover/repositories/match_repository.dart';
 import 'modules/discover/controllers/match_controller.dart';
 import 'modules/notifications/controllers/notification_controller.dart';
-import 'core/controllers/media_controller.dart';
-import 'core/services/spotify_service.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/push_notification_service.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,13 +33,12 @@ void main() async {
 
   // Initialize services
   Get.put(AuthRepository());
-  Get.put(MediaController());
   Get.put(PostRepository());
   Get.put(UserRepository());
   Get.put(ChatRepository());
   Get.put(MatchRepository());
   Get.put(MatchController());
-  Get.put(SpotifyService());
+
   Get.put(StorageService());
   Get.put(ConnectionService());
   Get.put(NotificationController());
@@ -48,7 +47,7 @@ void main() async {
   final pushService = Get.put(PushNotificationService());
   await pushService.init();
 
-  runApp(const CampusApp());
+  runApp(const ProviderScope(child: CampusApp()));
 }
 
 class CampusApp extends StatelessWidget {
@@ -62,13 +61,12 @@ class CampusApp extends StatelessWidget {
       splitScreenMode: true,
       builder: (context, child) {
         return GetMaterialApp(
+          title: 'Nexora',
           debugShowCheckedModeBanner: false,
-          title: 'NEXORA',
-          themeMode: ThemeMode.dark,
-          theme: NexoraTheme.darkTheme,
+          theme: NexoraTheme.lightTheme,
           darkTheme: NexoraTheme.darkTheme,
+          themeMode: ThemeMode.system,
           defaultTransition: Transition.cupertino,
-          transitionDuration: const Duration(milliseconds: 300),
           home: const SplashScreen(),
         );
       },

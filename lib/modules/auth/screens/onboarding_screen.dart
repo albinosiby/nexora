@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     OnboardingData(
       title: 'Real-time Matching',
       description:
-          'Find your perfect campus match with our real-time discovery and Spotify integration.',
+          'Find your perfect campus match with our real-time discovery and smart filtering.',
       icon: Icons.favorite_rounded,
       color: NexoraColors.romanticPink,
     ),

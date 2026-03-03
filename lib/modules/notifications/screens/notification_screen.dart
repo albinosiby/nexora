@@ -18,7 +18,7 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final NotificationController _controller = Get.put(NotificationController());
+  final NotificationController _controller = Get.find<NotificationController>();
   final ConnectionService _connectionService = Get.find<ConnectionService>();
 
   @override

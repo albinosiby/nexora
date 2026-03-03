@@ -1,28 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/nexora_theme.dart';
+import '../../../core/widgets/dark_background.dart';
 import '../repositories/chat_repository.dart';
 import '../models/chat_model.dart';
 import '../../profile/repositories/user_repository.dart';
 import 'chat_detail_screen.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
+import '../providers/chat_provider.dart';
 
-class ChatListScreen extends StatefulWidget {
+class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
 
   @override
-  State<ChatListScreen> createState() => _ChatListScreenState();
+  ConsumerState<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen>
-    with TickerProviderStateMixin {
-  late TabController _tabController;
+class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final ChatRepository _chatRepo = ChatRepository.instance;
+  late final ChatRepository _chatRepo = ref.read(chatRepositoryProvider);
   final UserRepository _userRepo = UserRepository.instance;
 
   // Cache resolved user names for filtering
@@ -46,263 +46,107 @@ class _ChatListScreenState extends State<ChatListScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // Background gradient orbs
-          Positioned(
-            top: -100.h,
-            right: -100.w,
-            child: Container(
-              width: 300.r,
-              height: 300.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.2),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 150.h,
-            left: -80.w,
-            child: Container(
-              width: 250.r,
-              height: 250.r,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    NexoraColors.romanticPink.withOpacity(0.12),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: StreamBuilder<List<ChatModel>>(
-              stream: _chatRepo.getConversations(),
-              builder: (context, snapshot) {
-                final chats = snapshot.data ?? [];
+    return DarkBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            SafeArea(
+              child: StreamBuilder<List<ChatModel>>(
+                stream: _chatRepo.getConversations(),
+                builder: (context, snapshot) {
+                  final chats = snapshot.data ?? [];
 
-                // onlineFriendsCount removed as it's not currently used in the main UI
+                  // onlineFriendsCount removed as it's not currently used in the main UI
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: 20.h),
-                    // Header
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20.w),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          ShaderMask(
-                            shaderCallback: (bounds) => LinearGradient(
-                              colors: [
-                                NexoraColors.textPrimary,
-                                NexoraColors.primaryPurple.withOpacity(0.9),
-                              ],
-                            ).createShader(bounds),
-                            child: Text(
-                              "Messages",
-                              style: TextStyle(
-                                fontSize: 28.sp,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 10.h),
+
+                      // Redesigned Search Bar
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20.w,
+                          vertical: 12.h,
+                        ),
+                        child: Container(
+                          height: 40.h,
+                          decoration: BoxDecoration(
+                            color: NexoraColors.primaryPurple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(15.r),
+                            border: Border.all(
+                              color: NexoraColors.primaryPurple.withOpacity(
+                                0.2,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 16.h),
-
-                    // Search Bar
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20.w),
-                      child: Container(
-                        height: 44.h,
-                        decoration: BoxDecoration(
-                          color: NexoraColors.glassBackground,
-                          borderRadius: BorderRadius.circular(14.r),
-                          border: Border.all(color: NexoraColors.glassBorder),
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) {
-                            setState(() => _searchQuery = value.toLowerCase());
-                          },
-                          style: TextStyle(
-                            color: NexoraColors.textPrimary,
-                            fontSize: 14.sp,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Search conversations...',
-                            hintStyle: TextStyle(
-                              color: NexoraColors.textMuted,
-                              fontSize: 14.sp,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              color: NexoraColors.textMuted,
-                              size: 20.r,
-                            ),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? GestureDetector(
-                                    onTap: () {
-                                      _searchController.clear();
-                                      setState(() => _searchQuery = '');
-                                    },
-                                    child: Icon(
-                                      Icons.close_rounded,
+                          child: Row(
+                            children: [
+                              SizedBox(width: 16.w),
+                              Icon(
+                                Icons.search,
+                                color: NexoraColors.textMuted,
+                                size: 24.r,
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _searchQuery = value.toLowerCase();
+                                    });
+                                  },
+                                  style: TextStyle(
+                                    color: NexoraColors.textPrimary,
+                                    fontSize: 17.sp,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search',
+                                    hintStyle: TextStyle(
                                       color: NexoraColors.textMuted,
-                                      size: 18.r,
+                                      fontSize: 17.sp,
                                     ),
-                                  )
-                                : null,
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              vertical: 12.h,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 12.h),
-
-                    // Tabs
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20.w),
-                      child: Container(
-                        height: 44.h,
-                        decoration: BoxDecoration(
-                          color: NexoraColors.glassBackground,
-                          borderRadius: BorderRadius.circular(14.r),
-                          border: Border.all(color: NexoraColors.glassBorder),
-                        ),
-                        child: TabBar(
-                          controller: _tabController,
-                          dividerColor: Colors.transparent,
-                          indicatorSize: TabBarIndicatorSize.tab,
-                          indicator: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12.r),
-                            gradient: NexoraGradients.primaryButton,
-                            boxShadow: [
-                              BoxShadow(
-                                color: NexoraColors.primaryPurple.withOpacity(
-                                  0.3,
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    fillColor: Colors.transparent,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12.w,
+                                    ),
+                                  ),
                                 ),
-                                blurRadius: 8.r,
-                                offset: Offset(0, 2.h),
                               ),
+                              Icon(
+                                Icons.mic_none_rounded,
+                                color: NexoraColors.textMuted,
+                                size: 24.r,
+                              ),
+                              SizedBox(width: 16.w),
                             ],
                           ),
-                          labelColor: Colors.white,
-                          unselectedLabelColor: NexoraColors.textMuted,
-                          labelStyle: TextStyle(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          unselectedLabelStyle: TextStyle(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          padding: EdgeInsets.all(4.r),
-                          tabs: [
-                            const Tab(text: "All Chats"),
-                            Tab(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text("Unread"),
-                                  if (chats.any(
-                                    (c) =>
-                                        (c.unreadCounts[_chatRepo
-                                                    .currentUserId ??
-                                                ''] ??
-                                            0) >
-                                        0,
-                                  )) ...[
-                                    SizedBox(width: 6.w),
-                                    Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 6.w,
-                                        vertical: 2.h,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: NexoraColors.loveRed,
-                                        borderRadius: BorderRadius.circular(
-                                          8.r,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '${chats.where((c) => (c.unreadCounts[_chatRepo.currentUserId ?? ''] ?? 0) > 0).length}',
-                                        style: TextStyle(
-                                          fontSize: 10.sp,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
 
-                    // Chat list
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildChatList(chats),
-                            _buildChatList(
-                              chats
-                                  .where(
-                                    (c) =>
-                                        (c.unreadCounts[_chatRepo
-                                                    .currentUserId ??
-                                                ''] ??
-                                            0) >
-                                        0,
-                                  )
-                                  .toList(),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                      // Chat List
+                      Expanded(child: _buildChatList(chats)),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -360,11 +204,12 @@ class _ChatListScreenState extends State<ChatListScreen>
           _userNameCache[otherUserId] = name;
         }
 
-        return TweenAnimationBuilder(
+        return TweenAnimationBuilder<double>(
+          key: ValueKey('chat_item_${chat.id}'),
           tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 300 + (index * 50)),
+          duration: Duration(milliseconds: 300 + (index.clamp(0, 10) * 50)),
           curve: Curves.easeOutCubic,
-          builder: (context, double value, child) {
+          builder: (context, value, child) {
             return Transform.translate(
               offset: Offset(30 * (1 - value), 0),
               child: Opacity(
@@ -372,152 +217,125 @@ class _ChatListScreenState extends State<ChatListScreen>
                 child: GestureDetector(
                   onTap: () {
                     _chatRepo.markAsRead(chat.id);
-                    Get.to(
-                      () => ChatDetailScreen(
-                        name: name,
-                        avatar: avatar,
-                        chatId: chat.id,
-                        participantId: otherUserId,
+                    Navigator.push(
+                      context,
+                      NexoraPageRoute(
+                        page: ChatDetailScreen(
+                          name: name,
+                          avatar: avatar,
+                          chatId: chat.id,
+                          participantId: otherUserId,
+                        ),
                       ),
                     );
                   },
                   onLongPress: () =>
                       _showChatOptions(chat, name, avatar, isOnline),
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: 6.h),
-                    child: Container(
-                      padding: EdgeInsets.all(10.r),
-                      decoration: BoxDecoration(
-                        color: hasUnread
-                            ? NexoraColors.primaryPurple.withOpacity(0.08)
-                            : NexoraColors.glassBackground,
-                        borderRadius: BorderRadius.circular(18.r),
-                        border: Border.all(
-                          color: hasUnread
-                              ? NexoraColors.primaryPurple.withOpacity(0.2)
-                              : NexoraColors.glassBorder,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20.w,
+                          vertical: 8.h,
+                        ),
+                        child: Row(
+                          children: [
+                            StreamBuilder<bool>(
+                              stream: _userRepo.getUserPresenceStream(
+                                otherUserId,
+                              ),
+                              builder: (context, presenceSnapshot) {
+                                final currentOnlineStatus =
+                                    presenceSnapshot.data ?? isOnline;
+                                return _buildAvatar(
+                                  avatar,
+                                  name,
+                                  currentOnlineStatus,
+                                  hasUnread,
+                                  otherUser,
+                                );
+                              },
+                            ),
+                            SizedBox(width: 16.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16.sp,
+                                            color: NexoraColors.textPrimary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatTime(chat.lastMessageTime),
+                                        style: TextStyle(
+                                          color: NexoraColors.textMuted,
+                                          fontSize: 11.sp,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  SizedBox(height: 2.h),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: isTyping
+                                            ? _buildTypingIndicator()
+                                            : Text(
+                                                chat.lastMessage.isEmpty
+                                                    ? 'Start a conversation'
+                                                    : chat.lastMessage,
+                                                style: TextStyle(
+                                                  color: hasUnread
+                                                      ? NexoraColors.textPrimary
+                                                      : NexoraColors.textMuted,
+                                                  fontSize: 13.sp,
+                                                  fontWeight: hasUnread
+                                                      ? FontWeight.w500
+                                                      : FontWeight.normal,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                      ),
+                                      if (hasUnread)
+                                        Container(
+                                          width: 10.r,
+                                          height: 10.r,
+                                          margin: EdgeInsets.only(left: 8.w),
+                                          decoration: BoxDecoration(
+                                            color: NexoraColors.romanticPink,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          StreamBuilder<bool>(
-                            stream: _userRepo.getUserPresenceStream(
-                              otherUserId,
-                            ),
-                            builder: (context, presenceSnapshot) {
-                              final currentOnlineStatus =
-                                  presenceSnapshot.data ?? isOnline;
-                              return _buildAvatar(
-                                avatar,
-                                name,
-                                currentOnlineStatus,
-                                hasUnread,
-                                otherUser,
-                              );
-                            },
-                          ),
-                          SizedBox(width: 14.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              name,
-                                              style: TextStyle(
-                                                fontWeight: hasUnread
-                                                    ? FontWeight.bold
-                                                    : FontWeight.w600,
-                                                fontSize: 15.sp,
-                                                color: NexoraColors.textPrimary,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (otherUser?.isVerified ==
-                                              true) ...[
-                                            SizedBox(width: 4.w),
-                                            Container(
-                                              padding: EdgeInsets.all(2.r),
-                                              decoration: const BoxDecoration(
-                                                color: NexoraColors.accentCyan,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                Icons.check,
-                                                size: 8.r,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    SizedBox(width: 8.w),
-                                    Text(
-                                      _formatTime(chat.lastMessageTime),
-                                      style: TextStyle(
-                                        color: hasUnread
-                                            ? NexoraColors.primaryPurple
-                                            : NexoraColors.textMuted,
-                                        fontSize: 12.sp,
-                                        fontWeight: hasUnread
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 4.h),
-                                Row(
-                                  children: [
-                                    if (!hasUnread &&
-                                        !isTyping &&
-                                        chat.lastMessage.isNotEmpty) ...[
-                                      _buildListStatusIcon(
-                                        chat.lastMessageSenderId ==
-                                            currentUserId,
-                                        chat.lastMessageStatus,
-                                      ),
-                                      SizedBox(width: 4.w),
-                                    ],
-                                    Expanded(
-                                      child: isTyping
-                                          ? _buildTypingIndicator()
-                                          : Text(
-                                              chat.lastMessage.isEmpty
-                                                  ? 'Start a conversation'
-                                                  : chat.lastMessage,
-                                              style: TextStyle(
-                                                color: hasUnread
-                                                    ? NexoraColors.textSecondary
-                                                    : NexoraColors.textMuted,
-                                                fontSize: 14.sp,
-                                                fontWeight: hasUnread
-                                                    ? FontWeight.w500
-                                                    : FontWeight.normal,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                    ),
-                                    if (hasUnread)
-                                      _buildUnreadBadge(unreadCount),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                      Padding(
+                        padding: EdgeInsets.only(left: 78.w, right: 20.w),
+                        child: Divider(
+                          color: Colors.white.withOpacity(0.04),
+                          height: 1,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -538,46 +356,54 @@ class _ChatListScreenState extends State<ChatListScreen>
     return GestureDetector(
       onTap: () {
         if (user != null) {
-          Get.to(
-            () => ProfileViewScreen(profile: user),
-            transition: Transition.rightToLeftWithFade,
+          Navigator.push(
+            context,
+            NexoraPageRoute(page: ProfileViewScreen(profile: user)),
           );
         }
       },
       child: Stack(
         children: [
           Container(
-            padding: isOnline ? EdgeInsets.all(3.r) : null,
-            decoration: isOnline
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(18.r),
-                    color: NexoraColors.midnightDark,
-                  )
-                : null,
-            child: Container(
-              width: 44.r,
-              height: 44.r,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16.r),
-                border: isOnline
-                    ? Border.all(color: NexoraColors.midnightDark, width: 2.w)
-                    : null,
-                boxShadow: hasUnread ? [NexoraShadows.purpleGlow] : null,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14.r),
-                child: avatar.startsWith('http')
-                    ? Image.network(
-                        avatar,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholder(name),
-                      )
-                    : _buildPlaceholder(name),
-              ),
+            width: 50.r,
+            height: 50.r,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10.r,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: avatar.startsWith('http')
+                  ? Image.network(
+                      avatar,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(name),
+                    )
+                  : _buildPlaceholder(name),
             ),
           ),
           if (isOnline)
-            Positioned(bottom: 0, right: 0, child: _buildOnlineIndicator()),
+            Positioned(
+              bottom: 2.r,
+              right: 2.r,
+              child: Container(
+                width: 11.r,
+                height: 11.r,
+                decoration: BoxDecoration(
+                  color: NexoraColors.online,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: NexoraColors.midnightDark,
+                    width: 2.5.w,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -585,35 +411,25 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Widget _buildPlaceholder(String name) {
     return Container(
-      decoration: BoxDecoration(gradient: NexoraGradients.primaryButton),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            NexoraColors.romanticPink.withOpacity(0.8),
+            NexoraColors.romanticPink,
+          ],
+        ),
+      ),
       child: Center(
         child: Text(
-          name.isNotEmpty ? name[0] : '?',
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
           style: TextStyle(
-            fontSize: 18.sp,
+            fontSize: 20.sp,
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildOnlineIndicator() {
-    return Container(
-      width: 16.r,
-      height: 16.r,
-      decoration: BoxDecoration(
-        color: NexoraColors.online,
-        shape: BoxShape.circle,
-        border: Border.all(color: NexoraColors.midnightDark, width: 3.w),
-        boxShadow: [
-          BoxShadow(
-            color: NexoraColors.online.withOpacity(0.5),
-            blurRadius: 6.r,
-            spreadRadius: 1.r,
-          ),
-        ],
       ),
     );
   }
@@ -624,7 +440,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         Text(
           'typing',
           style: TextStyle(
-            color: NexoraColors.primaryPurple,
+            color: NexoraColors.romanticPink,
             fontSize: 14.sp,
             fontStyle: FontStyle.italic,
           ),
@@ -642,7 +458,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                   height: 4.r,
                   margin: EdgeInsets.symmetric(horizontal: 1.w),
                   decoration: BoxDecoration(
-                    color: NexoraColors.primaryPurple.withOpacity(
+                    color: NexoraColors.romanticPink.withOpacity(
                       0.4 + (value * 0.6),
                     ),
                     shape: BoxShape.circle,
@@ -653,50 +469,6 @@ class _ChatListScreenState extends State<ChatListScreen>
           }),
         ),
       ],
-    );
-  }
-
-  Widget _buildUnreadBadge(int count) {
-    return Container(
-      margin: EdgeInsets.only(left: 10.w),
-      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-      decoration: BoxDecoration(
-        gradient: NexoraGradients.primaryButton,
-        borderRadius: BorderRadius.circular(12.r),
-        boxShadow: [
-          BoxShadow(
-            color: NexoraColors.primaryPurple.withOpacity(0.4),
-            blurRadius: 8.r,
-          ),
-        ],
-      ),
-      child: Text(
-        '$count',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 11.sp,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListStatusIcon(bool isSender, String? status) {
-    if (!isSender || status == null) return const SizedBox.shrink();
-
-    IconData icon = Icons.done_rounded;
-    Color color = NexoraColors.textMuted;
-
-    if (status == 'seen') {
-      icon = Icons.done_all_rounded;
-      color = NexoraColors.accentCyan;
-    } else if (status == 'delivered') {
-      icon = Icons.done_all_rounded;
-    }
-
-    return Padding(
-      padding: EdgeInsets.only(right: 4.w),
-      child: Icon(icon, size: 16.r, color: color),
     );
   }
 
@@ -798,7 +570,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                 _buildChatOption(
                   Icons.delete_outline_rounded,
                   'Delete chat',
-                  NexoraColors.error,
+                  NexoraColors.loveRed,
                 ),
                 SizedBox(height: 8.h),
               ],
@@ -810,8 +582,8 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   Widget _buildChatOption(IconData icon, String label, Color color) {
-    return GestureDetector(
-      onTap: () => Get.back(),
+    return InkWell(
+      onTap: () => Navigator.pop(context),
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 12.h),
         child: Row(

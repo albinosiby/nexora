@@ -56,7 +56,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    return DarkBackground(
+    return Container(
+      color: const Color(0xFF060606), // Match native splash_bg
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Center(
@@ -91,7 +92,7 @@ class _SplashScreenState extends State<SplashScreen>
                       SizedBox(height: 24.h),
                       // App name
                       Text(
-                        'Kootu',
+                        'Koottu',
                         style: NexoraTextStyles.headline2.copyWith(
                           letterSpacing: 6.w,
                           fontWeight: FontWeight.w700,

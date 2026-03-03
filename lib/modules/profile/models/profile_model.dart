@@ -20,9 +20,6 @@ class ProfileModel {
   final int posts;
   final List<String> interests;
   final String? instagram;
-  final String? spotify;
-  final String? spotifyTrackName;
-  final String? spotifyArtist;
   final String? lookingFor;
   final List<String> chats;
   final List<String> photos;
@@ -32,6 +29,8 @@ class ProfileModel {
   final bool pushNotifications;
   final bool messageNotifications;
   final bool feedNotifications;
+  final int profileLikes;
+  final List<String> likedBy;
 
   ProfileModel({
     required this.id,
@@ -55,9 +54,6 @@ class ProfileModel {
     this.posts = 0,
     this.interests = const [],
     this.instagram,
-    this.spotify,
-    this.spotifyTrackName,
-    this.spotifyArtist,
     this.lookingFor,
     this.chats = const [],
     this.photos = const [],
@@ -67,6 +63,8 @@ class ProfileModel {
     this.pushNotifications = true,
     this.messageNotifications = true,
     this.feedNotifications = true,
+    this.profileLikes = 0,
+    this.likedBy = const [],
   });
 
   String get displayName =>
@@ -110,9 +108,6 @@ class ProfileModel {
       posts: json['posts'] ?? 0,
       interests: List<String>.from(json['interests'] ?? []),
       instagram: json['instagram'],
-      spotify: json['spotify'],
-      spotifyTrackName: json['spotifyTrackName'],
-      spotifyArtist: json['spotifyArtist'],
       lookingFor: json['lookingFor'],
       chats: List<String>.from(json['chats'] ?? []),
       photos: List<String>.from(json['photos'] ?? []),
@@ -126,6 +121,8 @@ class ProfileModel {
       pushNotifications: json['pushNotifications'] ?? true,
       messageNotifications: json['messageNotifications'] ?? true,
       feedNotifications: json['feedNotifications'] ?? true,
+      profileLikes: json['profileLikes'] ?? 0,
+      likedBy: List<String>.from(json['likedBy'] ?? []),
     );
   }
 
@@ -159,9 +156,6 @@ class ProfileModel {
       connections: userData.connections ?? 0,
       posts: userData.posts ?? 0,
       instagram: userData.instagram,
-      spotify: userData.spotify,
-      spotifyTrackName: userData.spotifyTrackName,
-      spotifyArtist: userData.spotifyArtist,
       lookingFor: userData.lookingFor,
       age: userData.age,
       chats: userData.chats ?? const [],
@@ -174,6 +168,8 @@ class ProfileModel {
       pushNotifications: (userData as dynamic).pushNotifications ?? true,
       messageNotifications: (userData as dynamic).messageNotifications ?? true,
       feedNotifications: (userData as dynamic).feedNotifications ?? true,
+      profileLikes: (userData as dynamic).profileLikes ?? 0,
+      likedBy: List<String>.from((userData as dynamic).likedBy ?? []),
     );
   }
 
@@ -200,9 +196,6 @@ class ProfileModel {
       'posts': posts,
       'interests': interests,
       'instagram': instagram,
-      'spotify': spotify,
-      'spotifyTrackName': spotifyTrackName,
-      'spotifyArtist': spotifyArtist,
       'lookingFor': lookingFor,
       'chats': chats,
       'photos': photos,
@@ -212,6 +205,8 @@ class ProfileModel {
       'pushNotifications': pushNotifications,
       'messageNotifications': messageNotifications,
       'feedNotifications': feedNotifications,
+      'profileLikes': profileLikes,
+      'likedBy': likedBy,
     };
   }
 
@@ -237,9 +232,6 @@ class ProfileModel {
     int? posts,
     List<String>? interests,
     String? instagram,
-    String? spotify,
-    String? spotifyTrackName,
-    String? spotifyArtist,
     String? lookingFor,
     List<String>? chats,
     List<String>? photos,
@@ -249,6 +241,8 @@ class ProfileModel {
     bool? pushNotifications,
     bool? messageNotifications,
     bool? feedNotifications,
+    int? profileLikes,
+    List<String>? likedBy,
   }) {
     return ProfileModel(
       id: id ?? this.id,
@@ -272,9 +266,6 @@ class ProfileModel {
       posts: posts ?? this.posts,
       interests: interests ?? this.interests,
       instagram: instagram ?? this.instagram,
-      spotify: spotify ?? this.spotify,
-      spotifyTrackName: spotifyTrackName ?? this.spotifyTrackName,
-      spotifyArtist: spotifyArtist ?? this.spotifyArtist,
       lookingFor: lookingFor ?? this.lookingFor,
       chats: chats ?? this.chats,
       photos: photos ?? this.photos,
@@ -284,6 +275,8 @@ class ProfileModel {
       pushNotifications: pushNotifications ?? this.pushNotifications,
       messageNotifications: messageNotifications ?? this.messageNotifications,
       feedNotifications: feedNotifications ?? this.feedNotifications,
+      profileLikes: profileLikes ?? this.profileLikes,
+      likedBy: likedBy ?? this.likedBy,
     );
   }
 }

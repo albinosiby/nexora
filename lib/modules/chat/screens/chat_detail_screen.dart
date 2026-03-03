@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/chat_provider.dart';
 import '../../../core/controllers/media_controller.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -19,7 +23,7 @@ import '../models/message_model.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 
-class ChatDetailScreen extends StatefulWidget {
+class ChatDetailScreen extends ConsumerStatefulWidget {
   final String name;
   final String avatar;
   final String? chatId;
@@ -34,10 +38,10 @@ class ChatDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatDetailScreen> createState() => _ChatDetailScreenState();
+  ConsumerState<ChatDetailScreen> createState() => _ChatDetailScreenState();
 }
 
-class _ChatDetailScreenState extends State<ChatDetailScreen>
+class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
     with TickerProviderStateMixin {
   // Controllers
   late final TextEditingController _messageController;
@@ -45,9 +49,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   late final ScrollController _scrollController;
   late final AnimationController _typingAnimation;
 
-  final ChatRepository _chatRepo = ChatRepository.instance;
-  final UserRepository _userRepo = UserRepository.instance;
-  final StorageService _storageService = StorageService.instance;
+  late final ChatRepository _chatRepo;
+  late final UserRepository _userRepo;
+  late final StorageService _storageService;
 
   // Recording & Audio
   final _audioRecorder = AudioRecorder();
@@ -85,7 +89,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // State
   bool _isUploadingAudio = false;
   bool _isSending = false;
-  final RxSet<String> _downloadingIds = <String>{}.obs;
+  final Set<String> _downloadingAudioIds = {};
   bool _showEmojiKeyboard = false;
 
   // Reply
@@ -94,6 +98,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   @override
   void initState() {
     super.initState();
+    _chatRepo = ref.read(chatRepositoryProvider);
+    _userRepo = ref.read(userRepositoryProvider);
+    _storageService = ref.read(storageServiceProvider);
     _activeChatId = widget.chatId;
     _initializeControllers();
     _initializeChat();
@@ -143,19 +150,26 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _profileSubscription?.cancel();
 
       // Message stream
-      _messageSubscription = _chatRepo.getMessagesStream(_activeChatId!).listen(
-        (messages) {
-          if (mounted) {
-            setState(() {
-              _messages = messages;
-              _isLoading = false;
-            });
-            _scrollToBottom();
-            _chatRepo.markMessagesAsDelivered(_activeChatId!);
-            _chatRepo.markAsRead(_activeChatId!);
-          }
-        },
-      );
+      _messageSubscription = _chatRepo.getMessagesStream(_activeChatId!).listen((
+        messages,
+      ) {
+        if (mounted) {
+          setState(() {
+            // Deduplicate: remove local messages that are now confirmed by the server
+            final serverIds = messages.map((m) => m.id).toSet();
+            _messages.removeWhere((m) => serverIds.contains(m.id));
+
+            // Add server messages
+            _messages = [...messages, ..._messages];
+            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+            _isLoading = false;
+          });
+          _scrollToBottom();
+          _chatRepo.markMessagesAsDelivered(_activeChatId!);
+          _chatRepo.markAsRead(_activeChatId!);
+        }
+      });
 
       // Typing stream (for the OTHER user)
       if (widget.participantId != null) {
@@ -235,9 +249,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   void _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending) return;
+    if (text.isEmpty) return;
 
-    setState(() => _isSending = true);
+    // Capture state for optimistic update
+    final replyMsg = _replyingToMessage;
+    _messageController.clear();
+    setState(() => _replyingToMessage = null);
 
     try {
       if (_activeChatId == null) {
@@ -251,26 +268,52 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _setupStreams();
       }
 
-      // Capture reply before clearing state for optimistic feel
-      final replyMsg = _replyingToMessage;
-      _messageController.clear();
-      setState(() => _replyingToMessage = null);
+      // 1. Pre-generate ID
+      final String messageId = FirebaseDatabase.instance
+          .ref('messages/$_activeChatId')
+          .push()
+          .key!;
 
-      await _chatRepo.sendMessage(
+      // 2. Create optimistic message
+      final optimisticMsg = MessageModel(
+        id: messageId,
         chatId: _activeChatId!,
+        senderId: _chatRepo.currentUserId!,
         content: text,
+        type: MessageType.text,
+        timestamp: DateTime.now(),
         replyToId: replyMsg?.id,
         replyToContent: replyMsg?.content,
         replyToSenderId: replyMsg?.senderId,
       );
+
+      // 3. Update UI instantly
+      setState(() {
+        _messages.add(optimisticMsg);
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      });
       _scrollToBottom();
+
+      // 4. Send in background (no blocking setState)
+      _chatRepo
+          .sendMessage(
+            chatId: _activeChatId!,
+            content: text,
+            messageId: messageId,
+            replyToId: replyMsg?.id,
+            replyToContent: replyMsg?.content,
+            replyToSenderId: replyMsg?.senderId,
+          )
+          .catchError((e) {
+            print('Background Send Error: $e');
+            return '';
+          });
     } catch (e) {
       print('Send Message Error: $e');
-      Get.snackbar('Error', 'Failed to send message');
-    } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to send message')));
     }
   }
 
@@ -281,7 +324,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         final path =
             '${directory.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-        const config = RecordConfig();
+        // Optimized for small size: AAC, low bitrate
+        const config = RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 48000,
+          sampleRate: 44100,
+        );
 
         await _audioRecorder.start(config, path: path);
 
@@ -306,16 +354,24 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           });
         }
       } else {
-        Get.snackbar(
-          'Permission Denied',
-          'Please enable microphone access in settings to send voice messages',
-          backgroundColor: Colors.red.withOpacity(0.8),
-          colorText: Colors.white,
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Permission Denied: Please enable microphone access in settings to send voice messages',
+              ),
+              backgroundColor: Colors.red.withOpacity(0.8),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       print('Recording Error: $e');
-      Get.snackbar('Error', 'Could not start recording: $e');
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start recording: $e')),
+        );
     }
   }
 
@@ -343,14 +399,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (duration >= 1) {
         _sendVoiceMessage(path, duration);
       } else {
-        Get.snackbar(
-          'Message too short',
-          'Hold to record, release to send',
-          backgroundColor: NexoraColors.textMuted.withOpacity(0.9),
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 1),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Message too short: Hold to record, release to send',
+              ),
+              backgroundColor: NexoraColors.textMuted.withOpacity(0.9),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } else {
       if (path != null) {
@@ -400,21 +459,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _recordingCancelled = true;
     });
 
-    Get.snackbar(
-      'Cancelled',
-      'Voice message discarded',
-      backgroundColor: NexoraColors.textMuted.withOpacity(0.9),
-      colorText: Colors.white,
-      snackPosition: SnackPosition.TOP,
-      duration: const Duration(seconds: 1),
-      margin: EdgeInsets.all(16.w),
-      borderRadius: 12.r,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("Recording cancelled"),
+        backgroundColor: NexoraColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   void _sendVoiceMessage(String path, int duration) async {
-    if (_isSending) return;
-
     if (_activeChatId == null) {
       if (widget.participantId == null) return;
       final newChatId = await _chatRepo.createChat(widget.participantId!);
@@ -428,64 +482,79 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     // Capture reply before clearing
     final replyMsg = _replyingToMessage;
     setState(() {
-      _isSending = true;
       _replyingToMessage = null;
     });
 
     try {
       final file = File(path);
-      if (!await file.exists()) {
-        Get.snackbar('Error', 'Voice recording not found. Please try again.');
-        return;
-      }
+      if (!await file.exists()) return;
 
-      final fileSize = await file.length();
-      if (fileSize == 0) {
-        Get.snackbar('Error', 'Recording failed. Please try again.');
-        return;
-      }
+      // 1. Pre-generate ID
+      final String messageId = FirebaseDatabase.instance
+          .ref('messages/$_activeChatId')
+          .push()
+          .key!;
 
-      setState(() => _isUploadingAudio = true);
-      _scrollToBottom();
-
-      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final storagePath = 'chats/$_activeChatId/voice/$fileName';
-
-      final downloadUrl = await _storageService.uploadFile(file, storagePath);
-
-      final messageId = await _chatRepo.sendMessage(
+      // 2. Create optimistic message with local path cached
+      final optimisticMsg = MessageModel(
+        id: messageId,
         chatId: _activeChatId!,
+        senderId: _chatRepo.currentUserId!,
         content: 'Voice message',
         type: MessageType.voice,
-        mediaUrl: downloadUrl,
+        timestamp: DateTime.now(),
         duration: duration,
         replyToId: replyMsg?.id,
         replyToContent: replyMsg?.content,
         replyToSenderId: replyMsg?.senderId,
       );
 
-      // Cache the local path for the sender immediately
-      MediaController.instance.markAsDownloaded(messageId, path);
+      // Cache the local path for instant playback
+      ref
+          .read(mediaControllerProvider.notifier)
+          .markAsDownloaded(messageId, path);
 
+      // 3. Update UI instantly
+      setState(() {
+        _messages.add(optimisticMsg);
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      });
       _scrollToBottom();
+
+      // 4. Background upload and send
+      Future(() async {
+        final fileName = 'voice_${messageId}.m4a';
+        final storagePath = 'chats/$_activeChatId/voice/$fileName';
+        final downloadUrl = await _storageService.uploadFile(file, storagePath);
+
+        await _chatRepo.sendMessage(
+          chatId: _activeChatId!,
+          content: 'Voice message',
+          type: MessageType.voice,
+          mediaUrl: downloadUrl,
+          duration: duration,
+          messageId: messageId,
+          replyToId: replyMsg?.id,
+          replyToContent: replyMsg?.content,
+          replyToSenderId: replyMsg?.senderId,
+        );
+      }).catchError((e) {
+        print('Voice Background Send Error: $e');
+        return null;
+      });
     } catch (e) {
-      Get.snackbar('Error', 'Failed to send voice message: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploadingAudio = false;
-          _isSending = false;
-        });
-      }
+      print('Voice send error: $e');
     }
   }
 
   Future<void> _downloadAudio(MessageModel message) async {
-    if (message.mediaUrl == null || _downloadingIds.contains(message.id))
+    if (message.mediaUrl == null || _downloadingAudioIds.contains(message.id))
       return;
 
     try {
-      _downloadingIds.add(message.id);
+      setState(() {
+        _downloadingAudioIds.add(message.id);
+      });
 
       final response = await http.get(Uri.parse(message.mediaUrl!));
       if (response.statusCode == 200) {
@@ -495,16 +564,26 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         final file = File(path);
         await file.writeAsBytes(response.bodyBytes);
 
-        MediaController.instance.markAsDownloaded(message.id, path);
+        ref
+            .read(mediaControllerProvider.notifier)
+            .markAsDownloaded(message.id, path);
         if (mounted) setState(() {});
       } else {
-        Get.snackbar('Error', 'Failed to download audio');
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to download audio')),
+          );
       }
     } catch (e) {
       print('Download Error: $e');
-      Get.snackbar('Error', 'Failed to download audio: $e');
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to download audio: $e')));
     } finally {
-      _downloadingIds.remove(message.id);
+      setState(() {
+        _downloadingAudioIds.remove(message.id);
+      });
     }
   }
 
@@ -531,7 +610,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _addReaction(String messageId, String reaction) async {
-    Get.back();
+    // Get.back(); // Assuming Get.back() is from GetX, which is not imported.
+    // If this is meant to pop a dialog, use Navigator.pop(context);
+    Navigator.pop(context);
     if (_activeChatId == null) return;
 
     // Find message to toggle reaction
@@ -544,7 +625,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: NexoraColors.midnightDark,
       appBar: _buildAppBar(),
       body: Stack(
         children: [
@@ -602,7 +683,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       elevation: 0,
       leadingWidth: 40.w,
       leading: GestureDetector(
-        onTap: () => Get.back(),
+        onTap: () => Navigator.pop(context),
         child: Container(
           margin: EdgeInsets.only(left: 8.w),
           child: Icon(
@@ -681,22 +762,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   void _showUserProfile() {
-    Get.to(
-      () => ProfileViewScreen(
-        profile: ProfileModel(
-          id: 'user_${widget.name.toLowerCase().replaceAll(' ', '_')}',
-          name: widget.name,
-          username: widget.name,
-          email:
-              '${widget.name.toLowerCase().replaceAll(' ', '.')}@example.com',
-          avatar: widget.avatar,
-          bio: 'Hey there! I\'m using Nexora 💜',
-          year: '3rd Year',
-          major: 'Computer Science',
-          interests: const ['Music', 'Tech', 'Coffee', 'Gaming'],
-          isOnline: true,
-          spotifyTrackName: 'Espresso',
-          spotifyArtist: 'Sabrina Carpenter',
+    Navigator.push(
+      context,
+      NexoraPageRoute(
+        page: ProfileViewScreen(
+          profile: ProfileModel(
+            id: 'user_${widget.name.toLowerCase().replaceAll(' ', '_')}',
+            name: widget.name,
+            username: widget.name,
+            email:
+                '${widget.name.toLowerCase().replaceAll(' ', '.')}@example.com',
+            avatar: widget.avatar,
+            bio: 'Hey there! I\'m using Nexora 💜',
+            year: '3rd Year',
+            major: 'Computer Science',
+            interests: const ['Music', 'Tech', 'Coffee', 'Gaming'],
+            isOnline: true,
+          ),
         ),
       ),
     );
@@ -982,13 +1064,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
                 // Send or Voice button
                 GestureDetector(
-                  onTap: _isSending
-                      ? null
-                      : (hasText
-                            ? _sendMessage
-                            : (_isRecording
-                                  ? () => _stopRecording()
-                                  : null)), // Removed one-tap _startRecording(null)
+                  onTap: hasText
+                      ? _sendMessage
+                      : (_isRecording ? () => _stopRecording() : null),
                   onLongPressStart: (hasText || _isSending)
                       ? null
                       : _startRecording,
@@ -1015,19 +1093,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         ),
                       ],
                     ),
-                    child: _isSending
-                        ? Padding(
-                            padding: EdgeInsets.all(12.r),
-                            child: const CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Icon(
-                            hasText ? Icons.send_rounded : Icons.mic_rounded,
-                            color: Colors.white,
-                            size: 22.r,
-                          ),
+                    child: Icon(
+                      hasText ? Icons.send_rounded : Icons.mic_rounded,
+                      color: Colors.white,
+                      size: 22.r,
+                    ),
                   ),
                 ),
               ],
@@ -1930,16 +2000,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   Widget _buildImageMessage(MessageModel message) {
-    final bool isDownloaded = MediaController.instance.isDownloaded(message.id);
+    final String? localPath = ref.watch(mediaControllerProvider)[message.id];
+    final bool isDownloaded = localPath != null;
 
     if (!isDownloaded) {
       return GestureDetector(
-        onTap: () => setState(
-          () => MediaController.instance.markAsDownloaded(
-            message.id,
-            message.mediaUrl ?? '',
-          ),
-        ),
+        onTap: () => ref
+            .read(mediaControllerProvider.notifier)
+            .markAsDownloaded(message.id, message.mediaUrl ?? ''),
         child: Container(
           width: 200.w,
           height: 150.h,
@@ -1965,44 +2033,59 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     return GestureDetector(
       onTap: () {
-        if (message.mediaUrl != null) {
-          Get.to(
-            () => Scaffold(
+        final source = (File(localPath).existsSync())
+            ? FileImage(File(localPath)) as ImageProvider
+            : NetworkImage(message.mediaUrl ?? '');
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => Scaffold(
               backgroundColor: Colors.black,
               appBar: AppBar(
                 backgroundColor: Colors.transparent,
                 leading: IconButton(
                   icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Get.back(),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
               body: Center(
-                child: InteractiveViewer(
-                  child: Image.network(message.mediaUrl!),
-                ),
+                child: InteractiveViewer(child: Image(image: source)),
               ),
             ),
-          );
-        }
+          ),
+        );
       },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12.r),
         child: Container(
           constraints: BoxConstraints(maxHeight: 250.h),
-          child: Image.network(
-            message.mediaUrl ?? '',
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return SizedBox(
-                height: 200.h,
-                width: 200.w,
-                child: const Center(child: CircularProgressIndicator()),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) =>
-                Icon(Icons.broken_image, size: 50.r, color: Colors.white54),
-          ),
+          child: (File(localPath).existsSync())
+              ? Image.file(
+                  File(localPath),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    Icons.broken_image,
+                    size: 50.r,
+                    color: Colors.white54,
+                  ),
+                )
+              : Image.network(
+                  message.mediaUrl ?? '',
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      height: 200.h,
+                      width: 200.w,
+                      child: const Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    Icons.broken_image,
+                    size: 50.r,
+                    color: Colors.white54,
+                  ),
+                ),
         ),
       ),
     );
@@ -2029,8 +2112,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _buildAudioMessage(MessageModel message) {
     final isSender = message.senderId == _chatRepo.currentUserId;
-    final bool isDownloaded = MediaController.instance.isDownloaded(message.id);
-    final String? localPath = MediaController.instance.getLocalPath(message.id);
+    final bool isDownloaded = ref
+        .watch(mediaControllerProvider)
+        .containsKey(message.id);
+    final String? localPath = ref.watch(mediaControllerProvider)[message.id];
     final bool isPlaying =
         _currentlyPlayingId == message.id &&
         _playerState == PlayerState.playing;
@@ -2067,290 +2152,288 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ],
           ),
         ),
-        Obx(() {
-          final isDownloading = _downloadingIds.contains(message.id);
+        Consumer(
+          builder: (context, ref, child) {
+            final isDownloading = _downloadingAudioIds.contains(message.id);
 
-          return Container(
-            constraints: BoxConstraints(minWidth: 180.w, maxWidth: 220.w),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Avatar with Play/Download overlay (WhatsApp style)
-                GestureDetector(
-                  onTap: () async {
-                    if (message.mediaUrl == null || isDownloading) return;
+            return Container(
+              constraints: BoxConstraints(minWidth: 180.w, maxWidth: 220.w),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Avatar with Play/Download overlay (WhatsApp style)
+                  GestureDetector(
+                    onTap: () async {
+                      if (message.mediaUrl == null || isDownloading) return;
 
-                    if (!isDownloaded) {
-                      _downloadAudio(message);
-                      return;
-                    }
-
-                    if (isPlaying) {
-                      await _audioPlayer.pause();
-                      setState(() => _playerState = PlayerState.paused);
-                    } else {
-                      if (_currentlyPlayingId == message.id) {
-                        await _audioPlayer.resume();
-                      } else {
-                        await _audioPlayer.stop();
-                        final source =
-                            (localPath != null &&
-                                await File(localPath).exists())
-                            ? DeviceFileSource(localPath)
-                            : UrlSource(message.mediaUrl!);
-                        await _audioPlayer.play(source);
-                        _currentlyPlayingId = message.id;
+                      if (!isDownloaded) {
+                        _downloadAudio(message);
+                        return;
                       }
-                      setState(() => _playerState = PlayerState.playing);
 
-                      _audioPlayer.onPlayerComplete.listen((event) {
-                        if (mounted) {
-                          setState(() {
-                            _playerState = PlayerState.stopped;
-                            _currentlyPlayingId = null;
-                          });
+                      if (isPlaying) {
+                        await _audioPlayer.pause();
+                        setState(() => _playerState = PlayerState.paused);
+                      } else {
+                        if (_currentlyPlayingId == message.id) {
+                          await _audioPlayer.resume();
+                        } else {
+                          await _audioPlayer.stop();
+                          final source =
+                              (localPath != null &&
+                                  await File(localPath).exists())
+                              ? DeviceFileSource(localPath)
+                              : UrlSource(message.mediaUrl!);
+                          await _audioPlayer.play(source);
+                          _currentlyPlayingId = message.id;
                         }
-                      });
-                    }
-                  },
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Avatar background
-                      Container(
-                        width: 36.r,
-                        height: 36.r,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: isSender
-                              ? LinearGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.25),
-                                    Colors.white.withOpacity(0.1),
-                                  ],
-                                )
-                              : NexoraGradients.primaryButton,
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (isSender
-                                          ? Colors.black
-                                          : NexoraColors.primaryPurple)
-                                      .withOpacity(0.2),
-                              blurRadius: 6.r,
-                              offset: Offset(0, 2.h),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: isSender
-                              ? Center(
-                                  child: Text(
-                                    'You',
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.9),
-                                      fontSize: 9.sp,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                )
-                              : Image.network(
-                                  widget.avatar,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Center(
+                        setState(() => _playerState = PlayerState.playing);
+
+                        _audioPlayer.onPlayerComplete.listen((event) {
+                          if (mounted) {
+                            setState(() {
+                              _playerState = PlayerState.stopped;
+                              _currentlyPlayingId = null;
+                            });
+                          }
+                        });
+                      }
+                    },
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Avatar background
+                        Container(
+                          width: 36.r,
+                          height: 36.r,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: isSender
+                                ? LinearGradient(
+                                    colors: [
+                                      Colors.white.withOpacity(0.25),
+                                      Colors.white.withOpacity(0.1),
+                                    ],
+                                  )
+                                : NexoraGradients.primaryButton,
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    (isSender
+                                            ? Colors.black
+                                            : NexoraColors.primaryPurple)
+                                        .withOpacity(0.2),
+                                blurRadius: 6.r,
+                                offset: Offset(0, 2.h),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
+                            child: isSender
+                                ? Center(
                                     child: Text(
-                                      widget.name[0].toUpperCase(),
+                                      'You',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12.sp,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 9.sp,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                : Image.network(
+                                    widget.avatar,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Center(
+                                      child: Text(
+                                        widget.name.isNotEmpty
+                                            ? widget.name[0].toUpperCase()
+                                            : '?',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12.sp,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
+                          ),
+                        ),
+                        // Play/Download overlay
+                        Container(
+                          width: 28.r,
+                          height: 28.r,
+                          decoration: BoxDecoration(
+                            gradient: isPlaying
+                                ? NexoraGradients.romanticGlow
+                                : (isSender
+                                      ? NexoraGradients.primaryButton
+                                      : null),
+                            color: !isSender && !isPlaying
+                                ? NexoraColors.romanticPink
+                                : null,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    (isPlaying
+                                            ? NexoraColors.romanticPink
+                                            : Colors.black)
+                                        .withOpacity(0.3),
+                                blurRadius: 8.r,
+                                spreadRadius: 1.r,
+                              ),
+                            ],
+                          ),
+                          child: isDownloading
+                              ? Center(
+                                  child: SizedBox(
+                                    width: 14.r,
+                                    height: 14.r,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.r,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            Colors.white,
+                                          ),
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  !isDownloaded
+                                      ? Icons.download_rounded
+                                      : (isPlaying
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded),
+                                  color: Colors.white,
+                                  size: 18.r,
                                 ),
                         ),
-                      ),
-                      // Play/Download/Loading button overlay
-                      Container(
-                        width: 28.r,
-                        height: 28.r,
-                        decoration: BoxDecoration(
-                          gradient: isPlaying
-                              ? NexoraGradients.romanticGlow
-                              : (isSender
-                                    ? NexoraGradients.primaryButton
-                                    : null),
-                          color: !isSender && !isPlaying
-                              ? NexoraColors.romanticPink
-                              : null,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (isPlaying
-                                          ? NexoraColors.romanticPink
-                                          : Colors.black)
-                                      .withOpacity(0.3),
-                              blurRadius: 8.r,
-                              spreadRadius: 1.r,
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Waveform visualization
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: List.generate(28, (index) {
+                            final heights = [
+                              8,
+                              14,
+                              10,
+                              18,
+                              12,
+                              20,
+                              8,
+                              16,
+                              10,
+                              14,
+                              22,
+                              12,
+                              18,
+                              11,
+                              8,
+                              14,
+                              20,
+                              10,
+                              16,
+                              10,
+                              14,
+                              22,
+                              12,
+                              18,
+                              11,
+                              8,
+                              14,
+                              10,
+                            ];
+                            final height = heights[index % heights.length]
+                                .toDouble();
+
+                            return AnimatedBuilder(
+                              animation: _pulseAnimation,
+                              builder: (context, child) {
+                                final dynamicHeight = isPlaying
+                                    ? height +
+                                          (4 *
+                                              (index % 2 == 0
+                                                  ? _pulseAnimation.value
+                                                  : (1 -
+                                                        _pulseAnimation.value)))
+                                    : height;
+
+                                return Container(
+                                  width: 2.5.w,
+                                  height: dynamicHeight.h,
+                                  margin: EdgeInsets.only(right: 1.w),
+                                  decoration: BoxDecoration(
+                                    color: isPlaying
+                                        ? (isSender
+                                              ? Colors.white
+                                              : NexoraColors.accentCyan)
+                                        : (isSender
+                                              ? Colors.white.withOpacity(0.3)
+                                              : NexoraColors.textMuted
+                                                    .withOpacity(0.3)),
+                                    borderRadius: BorderRadius.circular(2.r),
+                                    boxShadow: isPlaying
+                                        ? [
+                                            BoxShadow(
+                                              color:
+                                                  (isSender
+                                                          ? Colors.white
+                                                          : NexoraColors
+                                                                .accentCyan)
+                                                      .withOpacity(0.3),
+                                              blurRadius: 4.r,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                );
+                              },
+                            );
+                          }),
+                        ),
+                        SizedBox(height: 6.h),
+                        Row(
+                          children: [
+                            Text(
+                              !isDownloaded && !isDownloading
+                                  ? "Tap to download"
+                                  : _formatDuration(message.duration ?? 0),
+                              style: TextStyle(
+                                color: isSender
+                                    ? Colors.white.withOpacity(0.8)
+                                    : NexoraColors.textMuted,
+                                fontSize: 10.sp,
+                                fontWeight: FontWeight.w500,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(
+                              Icons.mic_rounded,
+                              size: 14.r,
+                              color: isSender
+                                  ? Colors.white.withOpacity(0.6)
+                                  : NexoraColors.accentCyan,
                             ),
                           ],
                         ),
-                        child: isDownloading
-                            ? Center(
-                                child: SizedBox(
-                                  width: 14.r,
-                                  height: 14.r,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.r,
-                                    valueColor:
-                                        const AlwaysStoppedAnimation<Color>(
-                                          Colors.white,
-                                        ),
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                !isDownloaded
-                                    ? Icons.download_rounded
-                                    : (isPlaying
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded),
-                                color: Colors.white,
-                                size: 18.r,
-                              ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                SizedBox(width: 12.w),
-
-                // Waveform and duration
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Waveform visualization
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(28, (index) {
-                          final heights = [
-                            8,
-                            14,
-                            10,
-                            18,
-                            12,
-                            20,
-                            8,
-                            16,
-                            10,
-                            14,
-                            22,
-                            12,
-                            18,
-                            11,
-                            8,
-                            14,
-                            20,
-                            10,
-                            16,
-                            10,
-                            14,
-                            22,
-                            12,
-                            18,
-                            11,
-                            8,
-                            14,
-                            10,
-                          ];
-                          final height = heights[index % heights.length]
-                              .toDouble();
-
-                          return AnimatedBuilder(
-                            animation: _pulseAnimation,
-                            builder: (context, child) {
-                              // Animate height slightly if playing to give a "live" feel
-                              final dynamicHeight = isPlaying
-                                  ? height +
-                                        (4 *
-                                            (index % 2 == 0
-                                                ? _pulseAnimation.value
-                                                : (1 - _pulseAnimation.value)))
-                                  : height;
-
-                              return Container(
-                                width: 2.5.w,
-                                height: dynamicHeight.h,
-                                margin: EdgeInsets.only(right: 1.w),
-                                decoration: BoxDecoration(
-                                  color: isPlaying
-                                      ? (isSender
-                                            ? Colors.white
-                                            : NexoraColors.accentCyan)
-                                      : (isSender
-                                            ? Colors.white.withOpacity(0.3)
-                                            : NexoraColors.textMuted
-                                                  .withOpacity(0.3)),
-                                  borderRadius: BorderRadius.circular(2.r),
-                                  boxShadow: isPlaying
-                                      ? [
-                                          BoxShadow(
-                                            color:
-                                                (isSender
-                                                        ? Colors.white
-                                                        : NexoraColors
-                                                              .accentCyan)
-                                                    .withOpacity(0.3),
-                                            blurRadius: 4.r,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                              );
-                            },
-                          );
-                        }),
-                      ),
-                      SizedBox(height: 6.h),
-
-                      // Duration row
-                      Row(
-                        children: [
-                          // Duration
-                          Text(
-                            !isDownloaded && !isDownloading
-                                ? "Tap to download"
-                                : _formatDuration(message.duration ?? 0),
-                            style: TextStyle(
-                              color: isSender
-                                  ? Colors.white.withOpacity(0.8)
-                                  : NexoraColors.textMuted,
-                              fontSize: 10.sp,
-                              fontWeight: FontWeight.w500,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          // Mic icon indicator
-                          Icon(
-                            Icons.mic_rounded,
-                            size: 14.r,
-                            color: isSender
-                                ? Colors.white.withOpacity(0.6)
-                                : NexoraColors.accentCyan,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -2604,34 +2687,85 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       pickedFile = await picker.pickImage(source: ImageSource.camera);
     }
 
-    if (pickedFile != null && widget.chatId != null) {
-      Get.back(); // Close modal
+    if (pickedFile != null && _activeChatId != null) {
+      Navigator.pop(context); // Close modal
       try {
         final file = File(pickedFile.path);
-        final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final storagePath = 'chats/${widget.chatId}/images/$fileName';
 
-        Get.dialog(
-          const Center(child: CircularProgressIndicator()),
-          barrierDismissible: false,
-        );
+        // 1. Pre-generate ID
+        final String messageId = FirebaseDatabase.instance
+            .ref('messages/$_activeChatId')
+            .push()
+            .key!;
 
-        final downloadUrl = await _storageService.uploadFile(file, storagePath);
-        Get.back(); // Close loading
-
-        _chatRepo.sendMessage(
-          chatId: widget.chatId!,
+        // 2. Create optimistic message with local file path
+        // We'll use mediaUrl temporarily to store the local path for the 'illusion'
+        final optimisticMsg = MessageModel(
+          id: messageId,
+          chatId: _activeChatId!,
+          senderId: _chatRepo.currentUserId!,
           content: 'Sent an image',
           type: MessageType.image,
-          mediaUrl: downloadUrl,
+          mediaUrl: pickedFile.path, // LOCAL PATH
+          timestamp: DateTime.now(),
         );
+
+        // Cache local path so _buildImageMessage can show it instantly
+        ref
+            .read(mediaControllerProvider.notifier)
+            .markAsDownloaded(messageId, pickedFile.path);
+
+        // 3. Update UI instantly
+        setState(() {
+          _messages.add(optimisticMsg);
+          _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        });
         _scrollToBottom();
+
+        // 4. Background: Compress -> Upload -> Send
+        Future(() async {
+          // Compress
+          final directory = await getTemporaryDirectory();
+          final targetPath = '${directory.path}/compressed_${messageId}.jpg';
+
+          final result = await FlutterImageCompress.compressAndGetFile(
+            file.absolute.path,
+            targetPath,
+            quality: 70, // Significant compression
+            minWidth: 1024,
+            minHeight: 1024,
+          );
+
+          if (result == null) return;
+          final compressedFile = File(result.path);
+
+          final fileName = 'img_${messageId}.jpg';
+          final storagePath = 'chats/$_activeChatId/images/$fileName';
+
+          final downloadUrl = await _storageService.uploadFile(
+            compressedFile,
+            storagePath,
+          );
+
+          await _chatRepo.sendMessage(
+            chatId: _activeChatId!,
+            content: 'Sent an image',
+            type: MessageType.image,
+            mediaUrl: downloadUrl,
+            messageId: messageId,
+          );
+
+          // Clean up compressed file
+          if (await compressedFile.exists()) await compressedFile.delete();
+        }).catchError((e) {
+          print('Image Background Send Error: $e');
+          return null;
+        });
       } catch (e) {
-        Get.back(); // Close loading
-        Get.snackbar('Error', 'Failed to upload image');
+        print('Image attachment error: $e');
       }
     } else {
-      Get.back();
+      Navigator.pop(context);
     }
   }
 
@@ -2741,7 +2875,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         Icons.notifications_off_rounded,
                         'Mute notifications',
                         NexoraColors.textSecondary,
-                        () => Get.back(),
+                        () async {
+                          Navigator.pop(context);
+                          if (widget.chatId != null) {
+                            final isMuted = await ref
+                                .read(chatRepositoryProvider)
+                                .toggleMuteChat(widget.chatId!);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isMuted ? 'Chat muted' : 'Chat unmuted',
+                                ),
+                                backgroundColor: NexoraColors.primaryPurple,
+                              ),
+                            );
+                          }
+                        },
                       ),
 
                       Divider(color: NexoraColors.glassBorder, height: 24.h),
@@ -2749,19 +2898,123 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         Icons.delete_outline_rounded,
                         'Clear chat history',
                         NexoraColors.warning,
-                        () => Get.back(),
+                        () async {
+                          Navigator.pop(context);
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: NexoraColors.midnightDark,
+                              title: const Text(
+                                'Clear Chat?',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              content: const Text(
+                                'This will permanently delete all messages in this chat.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text(
+                                    'Clear',
+                                    style: TextStyle(color: NexoraColors.error),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed == true && widget.chatId != null) {
+                            await ref
+                                .read(chatRepositoryProvider)
+                                .clearMessages(widget.chatId!);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Chat history cleared'),
+                                backgroundColor: NexoraColors.primaryPurple,
+                              ),
+                            );
+                          }
+                        },
                       ),
                       _buildOptionItem(
                         Icons.block_rounded,
                         'Block user',
                         NexoraColors.error,
-                        () => Get.back(),
+                        () async {
+                          Navigator.pop(context);
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: NexoraColors.midnightDark,
+                              title: const Text(
+                                'Block User?',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              content: Text(
+                                'Are you sure you want to block ${widget.name}?',
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text(
+                                    'Block',
+                                    style: TextStyle(color: NexoraColors.error),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed == true &&
+                              widget.participantId != null) {
+                            await ref
+                                .read(chatRepositoryProvider)
+                                .blockUser(widget.participantId!);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${widget.name} has been blocked',
+                                ),
+                                backgroundColor: NexoraColors.error,
+                              ),
+                            );
+                          }
+                        },
                       ),
                       _buildOptionItem(
                         Icons.flag_rounded,
                         'Report user',
                         NexoraColors.error,
-                        () => Get.back(),
+                        () async {
+                          Navigator.pop(context);
+                          // Simplified report logic
+                          if (widget.participantId != null) {
+                            await ref
+                                .read(chatRepositoryProvider)
+                                .reportUser(
+                                  widget.participantId!,
+                                  'Reported from chat',
+                                );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('User reported'),
+                                backgroundColor: NexoraColors.error,
+                              ),
+                            );
+                          }
+                        },
                       ),
                       SizedBox(height: 8.h),
                     ],
