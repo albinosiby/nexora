@@ -52,3 +52,10 @@ final typingStatusProvider = StreamProvider.family
       final repo = ref.watch(chatRepositoryProvider);
       return repo.getTypingStatus(params.chatId, params.userId);
     });
+
+// Stream of all user IDs typing in a specific chat (e.g., for Community Chat)
+final typingUsersProvider = StreamProvider.family
+    .autoDispose<List<String>, String>((ref, chatId) {
+      final repo = ref.watch(chatRepositoryProvider);
+      return repo.getTypingUsersStream(chatId);
+    });

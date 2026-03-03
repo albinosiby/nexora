@@ -125,22 +125,24 @@ class ChatRepository {
       'lastMessageStatus': 'sent',
     });
 
-    // Update User Chats (for sorting and unread counts)
-    final chatDoc = await chatRef.get();
-    if (chatDoc.exists) {
-      final participantIds = List<String>.from(
-        chatDoc.child('participantIds').value as List,
-      );
-      for (var uid in participantIds) {
-        final userChatRef = _db.ref('user_chats/$uid/$chatId');
-        if (uid != currentUserId) {
-          // Increment unread for others
-          await userChatRef.child('unreadCount').runTransaction((count) {
-            if (count == null) return Transaction.success(1);
-            return Transaction.success((count as int) + 1);
-          });
+    // Update User Chats (skip for community chat)
+    if (chatId != 'community') {
+      final chatDoc = await chatRef.get();
+      if (chatDoc.exists) {
+        final participantIds = List<String>.from(
+          chatDoc.child('participantIds').value as List,
+        );
+        for (var uid in participantIds) {
+          final userChatRef = _db.ref('user_chats/$uid/$chatId');
+          if (uid != currentUserId) {
+            // Increment unread for others
+            await userChatRef.child('unreadCount').runTransaction((count) {
+              if (count == null) return Transaction.success(1);
+              return Transaction.success((count as int) + 1);
+            });
+          }
+          await userChatRef.update({'lastMessageTime': ServerValue.timestamp});
         }
-        await userChatRef.update({'lastMessageTime': ServerValue.timestamp});
       }
     }
 
@@ -282,6 +284,22 @@ class ChatRepository {
         .ref('chats/$chatId/typingStatus/$userId')
         .onValue
         .map((event) => event.snapshot.value as bool? ?? false);
+  }
+
+  /// Get a stream of user IDs currently typing in a chat
+  Stream<List<String>> getTypingUsersStream(String chatId) {
+    return _db.ref('chats/$chatId/typingStatus').onValue.map((event) {
+      final List<String> typingUsers = [];
+      if (event.snapshot.value == null) return typingUsers;
+
+      final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+      data.forEach((uid, isTyping) {
+        if (isTyping == true && uid != currentUserId) {
+          typingUsers.add(uid);
+        }
+      });
+      return typingUsers;
+    });
   }
 
   /// Add or remove a reaction on a message
