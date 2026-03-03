@@ -28,6 +28,10 @@ class UserModel {
   final bool feedNotifications;
   final int profileLikes;
   final List<String> likedBy;
+  final String vmlNumber;
+  final String? gender;
+  final DateTime? dateOfBirth;
+  final bool isVjecStudent;
 
   UserModel({
     required this.id,
@@ -58,6 +62,10 @@ class UserModel {
     this.feedNotifications = true,
     this.profileLikes = 0,
     this.likedBy = const [],
+    this.vmlNumber = '',
+    this.gender,
+    this.dateOfBirth,
+    this.isVjecStudent = false,
   });
 
   String get displayName =>
@@ -101,6 +109,14 @@ class UserModel {
       feedNotifications: json['feedNotifications'] ?? true,
       profileLikes: json['profileLikes'] ?? 0,
       likedBy: List<String>.from(json['likedBy'] ?? []),
+      vmlNumber: json['vmlNumber'] ?? '',
+      gender: json['gender'],
+      dateOfBirth: json['dateOfBirth'] != null
+          ? (json['dateOfBirth'] is String
+                ? DateTime.parse(json['dateOfBirth'])
+                : (json['dateOfBirth'] as dynamic).toDate())
+          : null,
+      isVjecStudent: json['isVjecStudent'] ?? false,
     );
   }
 
@@ -134,6 +150,10 @@ class UserModel {
       'feedNotifications': feedNotifications,
       'profileLikes': profileLikes,
       'likedBy': likedBy,
+      'vmlNumber': vmlNumber,
+      'gender': gender,
+      'dateOfBirth': dateOfBirth?.toIso8601String(),
+      'isVjecStudent': isVjecStudent,
     };
   }
 
@@ -168,6 +188,10 @@ class UserModel {
       'feedNotifications': feedNotifications,
       'profileLikes': profileLikes,
       'likedBy': likedBy,
+      'vmlNumber': vmlNumber,
+      'gender': gender,
+      'dateOfBirth': dateOfBirth,
+      'isVjecStudent': isVjecStudent,
     };
   }
 
@@ -212,6 +236,10 @@ class UserModel {
     bool? feedNotifications,
     int? profileLikes,
     List<String>? likedBy,
+    String? vmlNumber,
+    String? gender,
+    DateTime? dateOfBirth,
+    bool? isVjecStudent,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -242,6 +270,10 @@ class UserModel {
       feedNotifications: feedNotifications ?? this.feedNotifications,
       profileLikes: profileLikes ?? this.profileLikes,
       likedBy: likedBy ?? this.likedBy,
+      vmlNumber: vmlNumber ?? this.vmlNumber,
+      gender: gender ?? this.gender,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      isVjecStudent: isVjecStudent ?? this.isVjecStudent,
     );
   }
 }

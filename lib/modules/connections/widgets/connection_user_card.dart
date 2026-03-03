@@ -83,6 +83,11 @@ class ConnectionUserCard extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
+    final hasAvatar =
+        request.avatar != null &&
+        request.avatar!.isNotEmpty &&
+        request.avatar!.startsWith('http');
+
     return Container(
       width: 56.w,
       height: 56.w,
@@ -91,10 +96,16 @@ class ConnectionUserCard extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: ClipOval(
-        child: (request.avatar != null && request.avatar!.isNotEmpty)
+        child: hasAvatar
             ? Image.network(
                 request.avatar!,
+                width: 56.w,
+                height: 56.w,
                 fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return _buildAvatarPlaceholder();
+                },
                 errorBuilder: (context, error, stackTrace) =>
                     _buildAvatarPlaceholder(),
               )

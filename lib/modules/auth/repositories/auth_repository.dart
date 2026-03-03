@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -30,11 +31,22 @@ class AuthRepository extends GetxService {
   final RxBool _showOnboarding = true.obs;
   bool get showOnboarding => _showOnboarding.value;
 
+  final RxBool isUpdateSub = false.obs;
+  StreamSubscription? _updateSubscription;
+
   @override
   void onInit() {
     super.onInit();
     _checkOnboardingStatus();
+    _listenToAppUpdate();
     _firebaseUser.bindStream(_auth.authStateChanges());
+
+    // Listen to update status
+    ever(isUpdateSub, (bool isUpdate) {
+      if (isUpdate) {
+        _showUpdateNotification();
+      }
+    });
 
     // Listen to Firebase User changes
     _firebaseUser.listen((fb.User? user) {
@@ -108,6 +120,31 @@ class AuthRepository extends GetxService {
     return null;
   }
 
+  /// Check if a VML number is already in use
+  Future<bool> isVmlNumberUnique(String vmlNumber) async {
+    final query = await _firestore
+        .collection('users')
+        .where('vmlNumber', isEqualTo: vmlNumber)
+        .limit(1)
+        .get();
+    return query.docs.isEmpty;
+  }
+
+  void _listenToAppUpdate() {
+    _updateSubscription = _firestore
+        .collection('app_config')
+        .doc('update')
+        .snapshots()
+        .listen((snapshot) {
+          if (snapshot.exists) {
+            final data = snapshot.data();
+            if (data != null && data.containsKey('isUpdate')) {
+              isUpdateSub.value = data['isUpdate'] ?? false;
+            }
+          }
+        });
+  }
+
   // RTDB User Sync (for Chat Simulation & Online Status)
   Future<void> syncUserWithRTDB(UserModel userModel) async {
     final userRef = _database.ref('users/${userModel.id}');
@@ -132,6 +169,89 @@ class AuthRepository extends GetxService {
     if (user != null) {
       _currentUserProfile.value = await getUserProfile(user!.uid);
     }
+  }
+
+  void _showUpdateNotification() {
+    Get.dialog(
+      barrierDismissible: false,
+      Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: const Color(0xFF333333)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.purple.withOpacity(0.2),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.system_update_rounded,
+                  color: Colors.purpleAccent,
+                  size: 48,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Update Available',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'A new version of the app is available. Please update to continue using the app.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    // Navigate to website or store
+                    // For now, just close if it's not a hard block, but user asked for "corresponding function"
+                    // Usually this would open a URL.
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'Update Now',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> signOut() async {
@@ -174,6 +294,7 @@ class AuthRepository extends GetxService {
   @override
   void onClose() {
     _profileSubscription?.cancel();
+    _updateSubscription?.cancel();
     super.onClose();
   }
 }

@@ -78,16 +78,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // Avatar style options
-  final List<Map<String, String>> avatarStyles = [
-    {'value': 'avataaars', 'label': 'Classic'},
-    {'value': 'avataaars-neutral', 'label': 'Neutral'},
-    {'value': 'big-smile', 'label': 'Big Smile'},
-    {'value': 'lorelei', 'label': 'Lorelei'},
-    {'value': 'notionists', 'label': 'Notionists'},
-    {'value': 'personas', 'label': 'Personas'},
-    {'value': 'adventurer', 'label': 'Adventure'},
-    {'value': 'fun-emoji', 'label': 'Emoji'},
-  ];
 
   @override
   void initState() {
@@ -102,17 +92,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   void dispose() {
     _animController.dispose();
     super.dispose();
-  }
-
-  Future<void> _saveAvatarPreferences(String seed, String style) async {
-    final updatedProfile = profile.copyWith(
-      avatarSeed: seed,
-      avatarStyle: style,
-      // The avatar URL is generated from these and should be updated in the profile
-      avatar:
-          'https://api.dicebear.com/7.x/$style/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=transparent&size=200',
-    );
-    await _userRepo.updateProfile(updatedProfile);
   }
 
   Future<void> _logout() async {
@@ -173,278 +152,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showAvatarEditor() {
-    // Temporary state for preview, initialized from current profile
-    String tempSeed = profile.avatarSeed;
-    String tempStyle = profile.avatarStyle;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          String previewUrl =
-              'https://api.dicebear.com/7.x/$tempStyle/png?seed=${Uri.encodeComponent(tempSeed)}&backgroundColor=transparent&size=200';
-
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.85,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  NexoraColors.midnightPurple.withOpacity(0.95),
-                  NexoraColors.midnightDark.withOpacity(0.98),
-                ],
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
-              ),
-              border: Border.all(
-                color: NexoraColors.primaryPurple.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              children: [
-                // Handle bar
-                Container(
-                  margin: const EdgeInsets.only(top: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-
-                // Header
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: NexoraColors.textSecondary,
-                            fontSize: 14.sp,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        'Edit Avatar',
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                          color: NexoraColors.textPrimary,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _saveAvatarPreferences(tempSeed, tempStyle);
-                          Navigator.pop(context);
-                        },
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => NexoraGradients
-                              .primaryButton
-                              .createShader(bounds),
-                          child: const Text(
-                            'Save',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Avatar Preview
-                Container(
-                  width: 150.r,
-                  height: 150.r,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        NexoraColors.primaryPurple.withOpacity(0.3),
-                        NexoraColors.romanticPink.withOpacity(0.2),
-                      ],
-                    ),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: NexoraColors.primaryPurple.withOpacity(0.5),
-                      width: 3.w,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.network(
-                      previewUrl,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            color: NexoraColors.primaryPurple,
-                            strokeWidth: 3.w,
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) => Center(
-                        child: Text(
-                          tempSeed.isNotEmpty ? tempSeed[0].toUpperCase() : 'U',
-                          style: TextStyle(
-                            fontSize: 44.sp,
-                            color: NexoraColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Randomize button
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16.h),
-                  child: GestureDetector(
-                    onTap: () {
-                      setSheetState(() {
-                        tempSeed = DateTime.now().millisecondsSinceEpoch
-                            .toString();
-                      });
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20.w,
-                        vertical: 10.h,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: NexoraGradients.primaryButton,
-                        borderRadius: BorderRadius.circular(20.r),
-                        boxShadow: [
-                          BoxShadow(
-                            color: NexoraColors.primaryPurple.withOpacity(0.3),
-                            blurRadius: 10.r,
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.shuffle, color: Colors.white, size: 18.r),
-                          SizedBox(width: 8.w),
-                          const Text(
-                            'Randomize',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Options
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.symmetric(horizontal: 20.w),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Style selector
-                        _buildSectionTitle('Avatar Style'),
-                        SizedBox(
-                          height: 50.h,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: avatarStyles.length,
-                            itemBuilder: (context, index) {
-                              final style = avatarStyles[index];
-                              final isSelected = tempStyle == style['value'];
-                              return GestureDetector(
-                                onTap: () {
-                                  setSheetState(() {
-                                    tempStyle = style['value']!;
-                                  });
-                                },
-                                child: Container(
-                                  margin: EdgeInsets.only(right: 10.w),
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 16.w,
-                                    vertical: 8.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: isSelected
-                                        ? NexoraGradients.primaryButton
-                                        : null,
-                                    color: isSelected
-                                        ? null
-                                        : NexoraColors.cardBackground,
-                                    borderRadius: BorderRadius.circular(20.r),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Colors.transparent
-                                          : NexoraColors.cardBorder,
-                                      width: 1.w,
-                                    ),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      style['label']!,
-                                      style: TextStyle(
-                                        color: isSelected
-                                            ? Colors.white
-                                            : NexoraColors.textSecondary,
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        fontSize: 14.sp,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 12.h),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14.sp,
-          fontWeight: FontWeight.w600,
-          color: NexoraColors.textSecondary,
         ),
       ),
     );
@@ -600,38 +307,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       ),
                                     ),
                                   ),
-                                  // Edit avatar button
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: GestureDetector(
-                                      onTap: _showAvatarEditor,
-                                      child: Container(
-                                        padding: EdgeInsets.all(8.r),
-                                        decoration: BoxDecoration(
-                                          gradient:
-                                              NexoraGradients.primaryButton,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: NexoraColors.midnightDark,
-                                            width: 2.w,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: NexoraColors.primaryPurple
-                                                  .withOpacity(0.5),
-                                              blurRadius: 10.r,
-                                            ),
-                                          ],
-                                        ),
-                                        child: Icon(
-                                          Icons.edit,
-                                          color: Colors.white,
-                                          size: 16.r,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                   // Verified badge
                                   Positioned(
                                     bottom: 0,
@@ -692,7 +367,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                               const SizedBox(height: 6),
 
-                              // Year & Major badge
+                              // Major badge
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -716,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  '$userYear • $userMajor',
+                                  userMajor,
                                   style: const TextStyle(
                                     color: NexoraColors.textPrimary,
                                     fontSize: 14,
@@ -1448,24 +1123,6 @@ class _EditProfileScreenState extends State<EditProfileScreen>
 
                             SizedBox(height: 28.h),
 
-                            // Social Links Section
-                            _buildSectionHeader(
-                              'Connect Your Socials',
-                              Icons.link,
-                            ),
-                            SizedBox(height: 8.h),
-                            Text(
-                              'Let others discover you on other platforms',
-                              style: TextStyle(
-                                color: NexoraColors.textMuted,
-                                fontSize: 13.sp,
-                              ),
-                            ),
-                            SizedBox(height: 12.h),
-
-                            // TODO: Add other social links if needed
-                            SizedBox(height: 32.h),
-
                             // Save Button
                             _buildSaveButton(),
 
@@ -1516,30 +1173,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
               ),
             ),
           ),
-          TextButton(
-            onPressed: _saveProfile,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-              decoration: BoxDecoration(
-                gradient: NexoraGradients.primaryButton,
-                borderRadius: BorderRadius.circular(20.r),
-                boxShadow: [
-                  BoxShadow(
-                    color: NexoraColors.primaryPurple.withOpacity(0.3),
-                    blurRadius: 8.r,
-                  ),
-                ],
-              ),
-              child: Text(
-                'Save',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14.sp,
-                ),
-              ),
-            ),
-          ),
+          const SizedBox(width: 48), // Placeholder for symmetry
         ],
       ),
     );
@@ -1653,6 +1287,293 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     );
   }
 
+  void _showAvatarEditor() {
+    // Temporary state for preview, initialized from controllers/fields
+    String tempSeed = avatarSeed;
+    String tempStyle = avatarStyle;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          String previewUrl =
+              'https://api.dicebear.com/7.x/$tempStyle/png?seed=${Uri.encodeComponent(tempSeed)}&backgroundColor=transparent&size=200';
+
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  NexoraColors.midnightPurple.withOpacity(0.95),
+                  NexoraColors.midnightDark.withOpacity(0.98),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+              border: Border.all(
+                color: NexoraColors.primaryPurple.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: NexoraColors.textSecondary,
+                            fontSize: 14.sp,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        'Edit Avatar',
+                        style: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.bold,
+                          color: NexoraColors.textPrimary,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            avatarSeed = tempSeed;
+                            avatarStyle = tempStyle;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => NexoraGradients
+                              .primaryButton
+                              .createShader(bounds),
+                          child: const Text(
+                            'Save',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Avatar Preview
+                Container(
+                  width: 150.r,
+                  height: 150.r,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        NexoraColors.primaryPurple.withOpacity(0.3),
+                        NexoraColors.romanticPink.withOpacity(0.2),
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: NexoraColors.primaryPurple.withOpacity(0.5),
+                      width: 3.w,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: Image.network(
+                      previewUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            color: NexoraColors.primaryPurple,
+                            strokeWidth: 3.w,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => Center(
+                        child: Text(
+                          tempSeed.isNotEmpty ? tempSeed[0].toUpperCase() : 'U',
+                          style: TextStyle(
+                            fontSize: 44.sp,
+                            color: NexoraColors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Randomize button
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
+                  child: GestureDetector(
+                    onTap: () {
+                      setSheetState(() {
+                        tempSeed = DateTime.now().millisecondsSinceEpoch
+                            .toString();
+                      });
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 20.w,
+                        vertical: 10.h,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: NexoraGradients.primaryButton,
+                        borderRadius: BorderRadius.circular(20.r),
+                        boxShadow: [
+                          BoxShadow(
+                            color: NexoraColors.primaryPurple.withOpacity(0.3),
+                            blurRadius: 10.r,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shuffle, color: Colors.white, size: 18.r),
+                          SizedBox(width: 8.w),
+                          const Text(
+                            'Randomize',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Options
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(horizontal: 20.w),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Style selector
+                        _buildSectionTitleInSheet('Avatar Style'),
+                        SizedBox(
+                          height: 50.h,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: avatarStylesInSheet.length,
+                            itemBuilder: (context, index) {
+                              final style = avatarStylesInSheet[index];
+                              final isSelected = tempStyle == style['value'];
+                              return GestureDetector(
+                                onTap: () {
+                                  setSheetState(() {
+                                    tempStyle = style['value']!;
+                                  });
+                                },
+                                child: Container(
+                                  margin: EdgeInsets.only(right: 10.w),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 16.w,
+                                    vertical: 8.h,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    gradient: isSelected
+                                        ? NexoraGradients.primaryButton
+                                        : null,
+                                    color: isSelected
+                                        ? null
+                                        : NexoraColors.cardBackground,
+                                    borderRadius: BorderRadius.circular(20.r),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Colors.transparent
+                                          : NexoraColors.cardBorder,
+                                      width: 1.w,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      style['label']!,
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? Colors.white
+                                            : NexoraColors.textSecondary,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        fontSize: 14.sp,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Moved helper constants/methods for avatar from ProfileScreen to EditProfileScreen if needed
+  final List<Map<String, String>> avatarStylesInSheet = [
+    {'value': 'avataaars', 'label': 'Classic'},
+    {'value': 'avataaars-neutral', 'label': 'Neutral'},
+    {'value': 'big-smile', 'label': 'Big Smile'},
+    {'value': 'lorelei', 'label': 'Lorelei'},
+    {'value': 'notionists', 'label': 'Notionists'},
+    {'value': 'personas', 'label': 'Personas'},
+    {'value': 'adventurer', 'label': 'Adventure'},
+    {'value': 'fun-emoji', 'label': 'Emoji'},
+  ];
+
+  Widget _buildSectionTitleInSheet(String title) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12.h),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w600,
+          color: NexoraColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
   Widget _buildAvatarSection() {
     return Center(
       child: Column(
@@ -1733,21 +1654,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                 bottom: 0,
                 right: 0,
                 child: GestureDetector(
-                  onTap: () {
-                    // Navigate back to profile to use avatar editor
-                    Get.snackbar(
-                      'Edit Avatar',
-                      'Use the avatar editor on your profile page',
-                      backgroundColor: NexoraColors.midnightPurple.withOpacity(
-                        0.9,
-                      ),
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP,
-                      duration: const Duration(seconds: 2),
-                      margin: const EdgeInsets.all(16),
-                      borderRadius: 12,
-                    );
-                  },
+                  onTap: _showAvatarEditor,
                   child: Container(
                     padding: EdgeInsets.all(10.r),
                     decoration: BoxDecoration(

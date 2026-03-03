@@ -101,7 +101,9 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
     _chatRepo = ref.read(chatRepositoryProvider);
     _userRepo = ref.read(userRepositoryProvider);
     _storageService = ref.read(storageServiceProvider);
-    _activeChatId = widget.chatId;
+    _activeChatId = (widget.chatId != null && widget.chatId!.isNotEmpty)
+        ? widget.chatId
+        : null;
     _initializeControllers();
     _initializeChat();
     // Pre-emptively check for microphone permission

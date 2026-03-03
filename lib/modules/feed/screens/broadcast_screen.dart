@@ -647,7 +647,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
                           ),
                         ),
                         title: Text(
-                          'Nexora Feed',
+                          'Feed',
                           style: TextStyle(
                             fontSize: 28.sp,
                             fontWeight: FontWeight.bold,

@@ -99,7 +99,9 @@ class ProfileModel {
       age: json['age'] ?? 18,
       gender: json['gender'],
       dateOfBirth: json['dateOfBirth'] != null
-          ? DateTime.parse(json['dateOfBirth'])
+          ? (json['dateOfBirth'] is String
+                ? DateTime.parse(json['dateOfBirth'])
+                : (json['dateOfBirth'] as dynamic).toDate())
           : null,
       isVjecStudent: json['isVjecStudent'] ?? false,
       isOnline: json['isOnline'] ?? false,
@@ -158,6 +160,9 @@ class ProfileModel {
       instagram: userData.instagram,
       lookingFor: userData.lookingFor,
       age: userData.age,
+      gender: userData.gender,
+      dateOfBirth: userData.dateOfBirth,
+      isVjecStudent: userData.isVjecStudent,
       chats: userData.chats ?? const [],
       avatarSeed: avatarSeed,
       avatarStyle: avatarStyle,

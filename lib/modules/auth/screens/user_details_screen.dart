@@ -21,6 +21,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController nameController = TextEditingController();
   final TextEditingController aboutController = TextEditingController();
+  final TextEditingController vmlNumberController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   DateTime? _selectedDate;
@@ -118,10 +119,30 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       _isLoading = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
     try {
       final authRepo = AuthRepository.instance;
+
+      // Check VML uniqueness
+      final isUnique = await authRepo.isVmlNumberUnique(
+        vmlNumberController.text.trim(),
+      );
+      if (!isUnique) {
+        setState(() {
+          _isLoading = false;
+        });
+        Get.snackbar(
+          'VML ID Already in Use',
+          'If you are unable to enter your VML ID, please contact us through our website.',
+          backgroundColor: NexoraColors.romanticPink.withOpacity(0.9),
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 5),
+        );
+        return;
+      }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+
       final firebaseUser = authRepo.user;
 
       if (firebaseUser == null) {
@@ -136,6 +157,10 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         phone: widget.phoneNumber,
         bio: aboutController.text.trim(),
         major: _selectedDepartment,
+        vmlNumber: vmlNumberController.text.trim(),
+        gender: _selectedGender,
+        dateOfBirth: _selectedDate,
+        isVjecStudent: _isVjecStudent,
         createdAt: DateTime.now(),
         isOnline: true,
       );
@@ -279,6 +304,32 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                             }
                             return null;
                           },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // VML Number field
+                        _buildLabel('VML Number'),
+                        SizedBox(height: 8.h),
+                        _buildTextField(
+                          controller: vmlNumberController,
+                          hintText: 'Enter your unique VML ID',
+                          prefixIcon: Icons.badge_outlined,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'VML Number is required';
+                            }
+                            return null;
+                          },
+                        ),
+                        SizedBox(height: 8.h),
+                        Text(
+                          'If you are unable to enter your VML ID because it is already in use, please contact us through our website.',
+                          style: TextStyle(
+                            color: NexoraColors.textMuted,
+                            fontSize: 12.sp,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
 
                         const SizedBox(height: 20),
@@ -739,6 +790,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     usernameController.dispose();
     nameController.dispose();
     aboutController.dispose();
+    vmlNumberController.dispose();
     super.dispose();
   }
 }

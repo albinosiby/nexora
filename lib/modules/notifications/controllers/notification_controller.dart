@@ -129,6 +129,7 @@ class NotificationController extends GetxController {
             n.type == NotificationType.like ||
             n.type == NotificationType.comment ||
             n.type == NotificationType.follow ||
+            n.type == NotificationType.feed ||
             n.type == NotificationType.profileLike,
       )
       .toList();

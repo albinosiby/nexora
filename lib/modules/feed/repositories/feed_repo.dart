@@ -91,12 +91,45 @@ class PostRepository implements IPostRepository {
   Future<PostModel> createPost(PostModel post) async {
     final docRef = await _postsCollection.add(post.toJson());
     final doc = await docRef.get();
+    final postId = docRef.id;
 
     // Increment the user's post count
     if (post.userId.isNotEmpty) {
       await _firestore.collection('users').doc(post.userId).update({
         'posts': FieldValue.increment(1),
       });
+
+      // Notify connections about new post
+      try {
+        final connectionsSnapshot = await _firestore
+            .collection('users')
+            .doc(post.userId)
+            .collection('connections')
+            .get();
+
+        if (connectionsSnapshot.docs.isNotEmpty) {
+          final notification = NotificationModel(
+            id: '',
+            type: NotificationType.feed,
+            userId: post.userId,
+            userName: post.displayName,
+            userAvatar: post.avatar,
+            message: 'shared a new post',
+            timestamp: DateTime.now(),
+            targetId: postId,
+          );
+
+          for (var doc in connectionsSnapshot.docs) {
+            final connectionId = doc.id;
+            NotificationRepository().addNotification(
+              notification,
+              connectionId,
+            );
+          }
+        }
+      } catch (e) {
+        print('Error notifying connections: $e');
+      }
     }
 
     return PostModel.fromFirestore(doc);

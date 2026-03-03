@@ -74,31 +74,42 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     children: [
                       SizedBox(height: 10.h),
 
-                      // Redesigned Search Bar
+                      // Search Bar (same as Feed)
                       Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: 20.w,
                           vertical: 12.h,
                         ),
                         child: Container(
-                          height: 40.h,
+                          height: 50.h,
+                          padding: EdgeInsets.symmetric(horizontal: 16.w),
                           decoration: BoxDecoration(
-                            color: NexoraColors.primaryPurple.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(15.r),
+                            color: NexoraColors.glassBackground,
+                            borderRadius: BorderRadius.circular(25.r),
                             border: Border.all(
                               color: NexoraColors.primaryPurple.withOpacity(
-                                0.2,
+                                0.3,
                               ),
+                              width: 1.5.w,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: NexoraColors.primaryPurple.withOpacity(
+                                  0.1,
+                                ),
+                                blurRadius: 10.r,
+                                offset: Offset(0, 4.h),
+                              ),
+                            ],
                           ),
                           child: Row(
                             children: [
-                              SizedBox(width: 16.w),
                               Icon(
                                 Icons.search,
-                                color: NexoraColors.textMuted,
-                                size: 24.r,
+                                color: NexoraColors.primaryPurple,
+                                size: 22.r,
                               ),
+                              SizedBox(width: 12.w),
                               Expanded(
                                 child: TextField(
                                   controller: _searchController,
@@ -109,30 +120,43 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                                   },
                                   style: TextStyle(
                                     color: NexoraColors.textPrimary,
-                                    fontSize: 17.sp,
+                                    fontSize: 15.sp,
                                   ),
                                   decoration: InputDecoration(
-                                    hintText: 'Search',
+                                    hintText: 'Search conversations...',
                                     hintStyle: TextStyle(
                                       color: NexoraColors.textMuted,
-                                      fontSize: 17.sp,
+                                      fontSize: 14.sp,
                                     ),
                                     border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    fillColor: Colors.transparent,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12.w,
-                                    ),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
                                   ),
                                 ),
                               ),
-                              Icon(
-                                Icons.mic_none_rounded,
-                                color: NexoraColors.textMuted,
-                                size: 24.r,
-                              ),
-                              SizedBox(width: 16.w),
+                              if (_searchQuery.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _searchController.clear();
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: EdgeInsets.all(4.r),
+                                    decoration: BoxDecoration(
+                                      color: NexoraColors.textMuted.withOpacity(
+                                        0.2,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.close,
+                                      color: NexoraColors.textMuted,
+                                      size: 16.r,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),

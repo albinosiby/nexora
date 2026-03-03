@@ -120,7 +120,7 @@ class _MatchScreenState extends State<MatchScreen>
                           ],
                         ).createShader(bounds),
                         child: Text(
-                          'Kootu',
+                          'Koottu',
                           style: NexoraTextStyles.headline2.copyWith(
                             fontSize: 26.sp,
                             fontWeight: FontWeight.w700,
@@ -354,7 +354,7 @@ class _MatchScreenState extends State<MatchScreen>
                         crossAxisCount: 2,
                         mainAxisSpacing: 16.h,
                         crossAxisSpacing: 16.w,
-                        childAspectRatio: 0.62,
+                        childAspectRatio: 0.8,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) =>
@@ -557,39 +557,23 @@ class _MatchScreenState extends State<MatchScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Name and Age
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            user.displayName,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18.sp,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black45,
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 4.r,
-                                ),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    // Name
+                    Text(
+                      user.displayName,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18.sp,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black45,
+                            offset: const Offset(0, 1),
+                            blurRadius: 4.r,
                           ),
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          '${user.year}', // Using year as placeholder for age
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontWeight: FontWeight.w400,
-                            fontSize: 14.sp,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: 12.h),
 
@@ -637,15 +621,17 @@ class _MatchScreenState extends State<MatchScreen>
               ),
 
               // Online indicator (real-time from RTDB)
-              StreamBuilder<bool>(
-                stream: UserRepository.instance.getUserPresenceStream(user.id),
-                builder: (context, snapshot) {
-                  final isOnline = snapshot.data ?? user.isOnline;
-                  if (!isOnline) return const SizedBox.shrink();
-                  return Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
+              Positioned(
+                top: 10,
+                right: 10,
+                child: StreamBuilder<bool>(
+                  stream: UserRepository.instance.getUserPresenceStream(
+                    user.id,
+                  ),
+                  builder: (context, snapshot) {
+                    final isOnline = snapshot.data ?? user.isOnline;
+                    if (!isOnline) return const SizedBox.shrink();
+                    return Container(
                       width: 10.r,
                       height: 10.r,
                       decoration: BoxDecoration(
@@ -658,9 +644,9 @@ class _MatchScreenState extends State<MatchScreen>
                           ),
                         ],
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ],
           ),

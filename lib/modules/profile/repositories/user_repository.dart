@@ -54,6 +54,9 @@ class UserRepository {
       avatarStyle: user.avatarStyle,
       profileLikes: user.profileLikes,
       likedBy: user.likedBy,
+      gender: user.gender,
+      dateOfBirth: user.dateOfBirth,
+      isVjecStudent: user.isVjecStudent,
       photos: [],
     );
   }

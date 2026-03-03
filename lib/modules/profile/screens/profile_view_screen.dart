@@ -667,8 +667,8 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
 
                 const SizedBox(height: 8),
 
-                // Year & Major
-                if (profile.year.isNotEmpty || profile.major.isNotEmpty)
+                // Major
+                if (profile.major.isNotEmpty)
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: 16.w,
@@ -688,10 +688,7 @@ class _ProfileViewScreenState extends State<ProfileViewScreen>
                       ),
                     ),
                     child: Text(
-                      [
-                        profile.year,
-                        profile.major,
-                      ].where((s) => s.isNotEmpty).join(' • '),
+                      profile.major,
                       style: TextStyle(
                         color: NexoraColors.textPrimary,
                         fontSize: 14.sp,
