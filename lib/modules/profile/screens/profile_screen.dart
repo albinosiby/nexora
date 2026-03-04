@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/nexora_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../repositories/user_repository.dart';
 import '../models/profile_model.dart';
-import '../../auth/screens/login_screen.dart';
 
 import '../../settings/screens/settings_screen.dart';
 
@@ -92,69 +90,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   void dispose() {
     _animController.dispose();
     super.dispose();
-  }
-
-  Future<void> _logout() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.transparent,
-        content: GlassContainer(
-          borderRadius: 24.r,
-          padding: EdgeInsets.all(20.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.logout, color: NexoraColors.error, size: 50.r),
-              SizedBox(height: 16.h),
-              Text(
-                'Logout',
-                style: TextStyle(
-                  fontSize: 24.sp,
-                  fontWeight: FontWeight.bold,
-                  color: NexoraColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 8.h),
-              Text(
-                'Are you sure you want to logout?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: NexoraColors.textSecondary,
-                  fontSize: 14.sp,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Get.back(),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: NexoraColors.error,
-                      ),
-                      onPressed: () async {
-                        Get.back();
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('isLoggedIn', false);
-                        Get.off(() => const LoginScreen());
-                      },
-                      child: const Text('Logout'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -541,33 +476,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // Logout Button
-                    TextButton(
-                      onPressed: _logout,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.logout,
-                            color: NexoraColors.textMuted,
-                            size: 18.r,
-                          ),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Logout',
-                            style: TextStyle(
-                              color: NexoraColors.textMuted,
-                              fontSize: 14.sp,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
 
                     // App Version
                     Text(
@@ -963,6 +871,11 @@ class _EditProfileScreenState extends State<EditProfileScreen>
     final String instagram = instagramController.text;
     final String looking = selectedLookingFor;
 
+    // Recalculate avatar URL to ensure it persists correctly
+    final String currentAvatarSeed = avatarSeed.isNotEmpty ? avatarSeed : name;
+    final String newAvatarUrl =
+        'https://api.dicebear.com/7.x/$avatarStyle/png?seed=${Uri.encodeComponent(currentAvatarSeed)}&backgroundColor=transparent&size=200';
+
     final updatedProfile = widget.profile.copyWith(
       name: name,
       username: username,
@@ -974,6 +887,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
       lookingFor: looking,
       avatarSeed: avatarSeed,
       avatarStyle: avatarStyle,
+      avatar: newAvatarUrl,
     );
 
     // Update via repository (saves to Firestore and syncs RTDB)
@@ -1275,7 +1189,7 @@ class _EditProfileScreenState extends State<EditProfileScreen>
                         ? const LinearGradient(
                             colors: [NexoraColors.success, Color(0xFF81C784)],
                           )
-                        : NexoraGradients.logoGradient,
+                        : NexoraGradients.primaryButton,
                     borderRadius: BorderRadius.circular(10.r),
                   ),
                 ),

@@ -31,15 +31,15 @@ class NexoraColors {
   static const Color softAmber = Color(0xFFFFD700); // Gold amber
   static const Color deepAmber = Color(0xFFCC7722); // Ocher amber
 
-  // --- BACKWARD COMPATIBILITY ALIASES ---
-  static const Color primaryPurple = primaryOrange;
-  static const Color romanticPink = flameRed;
-  static const Color softPink = peachOrange;
-  static const Color accentCyan = accentAmber;
-  static const Color softCyan = softAmber;
-  static const Color deepCyan = deepAmber;
-  static const Color brightPurple = brightOrange;
-  static const Color deepPurple = deepOrange;
+  // --- BACKWARD COMPATIBILITY ALIASES (now all orange/amber) ---
+  static const Color primaryPurple = Color(0xFFFF8C00); // → primaryOrange
+  static const Color romanticPink = Color(0xFFFF4500); // → flameRed
+  static const Color softPink = Color(0xFFFFCC80); // → peachOrange
+  static const Color accentCyan = Color(0xFFFFBF00); // → accentAmber
+  static const Color softCyan = Color(0xFFFFD700); // → softAmber
+  static const Color deepCyan = Color(0xFFCC7722); // → deepAmber
+  static const Color brightPurple = Color(0xFFFFA500); // → brightOrange
+  static const Color deepPurple = Color(0xFFE65100); // → deepOrange
 
   // ---------------- TEXT COLORS ----------------
   static const Color textPrimary = Colors.white;
@@ -88,12 +88,9 @@ class NexoraGradients {
     end: Alignment.bottomCenter,
   );
 
-  // Primary button gradient (Glassy Style)
-  static final LinearGradient primaryButton = LinearGradient(
-    colors: [
-      NexoraColors.glassBackground,
-      NexoraColors.primaryPurple.withOpacity(0.1),
-    ],
+  // Primary button gradient (Orange/Black style)
+  static const LinearGradient primaryButton = LinearGradient(
+    colors: [NexoraColors.primaryOrange, NexoraColors.midnightDark],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -142,11 +139,8 @@ class NexoraGradients {
   );
 
   // Glassy button/filter gradient
-  static final LinearGradient glassyGradient = LinearGradient(
-    colors: [
-      NexoraColors.glassBackground,
-      NexoraColors.primaryPurple.withOpacity(0.1),
-    ],
+  static const LinearGradient glassyGradient = LinearGradient(
+    colors: [NexoraColors.primaryOrange, NexoraColors.midnightDark],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

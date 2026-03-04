@@ -187,7 +187,7 @@ class PostRepository implements IPostRepository {
           id: '',
           type: NotificationType.like,
           userId: userId,
-          userName: likingUser?.name ?? 'Someone',
+          userName: likingUser?.displayName ?? 'Someone',
           userAvatar: likingUser?.avatar,
           message: 'liked your post',
           timestamp: DateTime.now(),
@@ -217,7 +217,7 @@ class PostRepository implements IPostRepository {
           id: '',
           type: NotificationType.like,
           userId: userId,
-          userName: likingUser?.name ?? 'Someone',
+          userName: likingUser?.displayName ?? 'Someone',
           userAvatar: likingUser?.avatar,
           message: 'liked your post',
           timestamp: DateTime.now(),
@@ -254,65 +254,132 @@ class PostRepository implements IPostRepository {
       createdAt: DateTime.now(),
     );
 
+    // Update Firestore immediately
     await _postsCollection.doc(postId).update({
       'comments_list': FieldValue.arrayUnion([newComment.toJson()]),
       'comments': FieldValue.increment(1),
     });
 
-    final postDoc = await _postsCollection.doc(postId).get();
-    if (!postDoc.exists) return newComment;
+    // Run notifications asynchronously to avoid blocking the UI
+    _handleCommentNotifications(postId, newComment);
 
-    final post = PostModel.fromFirestore(postDoc);
+    return newComment;
+  }
 
-    // 1. Send notification to post owner
-    if (post.userId != comment.userId) {
-      final notification = NotificationModel(
-        id: '',
-        type: NotificationType.comment,
-        userId: comment.userId,
-        userName: comment.displayName,
-        userAvatar: comment.avatar,
-        message: 'commented: ${comment.comment}',
-        timestamp: DateTime.now(),
-        targetId: postId,
-      );
-      NotificationRepository().addNotification(notification, post.userId);
-    }
+  Future<void> _handleCommentNotifications(
+    String postId,
+    CommentModel comment,
+  ) async {
+    try {
+      final postDoc = await _postsCollection.doc(postId).get();
+      if (!postDoc.exists) return;
 
-    // 2. Handle mentions
-    final mentionRegex = RegExp(r'@(\w+)');
-    final mentions = mentionRegex.allMatches(comment.comment);
-    final uniqueUsernames = mentions
-        .map((m) => m.group(1)!.toLowerCase())
-        .toSet()
-        .where((username) => username != comment.displayName.toLowerCase());
+      final post = PostModel.fromFirestore(postDoc);
 
-    for (final username in uniqueUsernames) {
-      final mentionedUser = await UserRepository.instance.getUserByUsername(
-        username,
-      );
-      if (mentionedUser != null && mentionedUser.id != comment.userId) {
-        // Only send mention notification if it's not the already-notified post owner
-        // (Unless you want them to get both, but usually one is enough.
-        // Let's send mention notification to anyone tagged who isn't the commenter)
-        final mentionNotification = NotificationModel(
+      // 1. Send notification to post owner
+      if (post.userId != comment.userId) {
+        final notification = NotificationModel(
           id: '',
-          type: NotificationType.mention,
+          type: NotificationType.comment,
           userId: comment.userId,
           userName: comment.displayName,
           userAvatar: comment.avatar,
-          message: 'mentioned you in a comment: ${comment.comment}',
+          message: 'commented: ${comment.comment}',
           timestamp: DateTime.now(),
           targetId: postId,
         );
-        NotificationRepository().addNotification(
-          mentionNotification,
-          mentionedUser.id,
-        );
+        NotificationRepository().addNotification(notification, post.userId);
       }
+
+      // 2. Handle mentions
+      final mentionRegex = RegExp(r'@(\w+)');
+      final mentions = mentionRegex.allMatches(comment.comment);
+      final uniqueUsernames = mentions
+          .map((m) => m.group(1)!.toLowerCase())
+          .toSet()
+          .where((username) => username != comment.displayName.toLowerCase());
+
+      for (final username in uniqueUsernames) {
+        final mentionedUser = await UserRepository.instance.getUserByUsername(
+          username,
+        );
+        if (mentionedUser != null && mentionedUser.id != comment.userId) {
+          final mentionNotification = NotificationModel(
+            id: '',
+            type: NotificationType.mention,
+            userId: comment.userId,
+            userName: comment.displayName,
+            userAvatar: comment.avatar,
+            message: 'mentioned you in a comment: ${comment.comment}',
+            timestamp: DateTime.now(),
+            targetId: postId,
+          );
+          NotificationRepository().addNotification(
+            mentionNotification,
+            mentionedUser.id,
+          );
+        }
+      }
+    } catch (e) {
+      print('Error handling comment notifications: $e');
+    }
+  }
+
+  Future<void> toggleCommentLike(
+    String postId,
+    String commentId,
+    String userId,
+  ) async {
+    final doc = await _postsCollection.doc(postId).get();
+    if (!doc.exists) return;
+
+    final post = PostModel.fromFirestore(doc);
+    final commentIndex = post.commentsList.indexWhere((c) => c.id == commentId);
+    if (commentIndex == -1) return;
+
+    final comment = post.commentsList[commentIndex];
+    final isLiked = comment.likedBy.contains(userId);
+
+    List<String> newLikedBy = List<String>.from(comment.likedBy);
+    int newLikes = comment.likes;
+
+    if (isLiked) {
+      newLikedBy.remove(userId);
+      newLikes--;
+    } else {
+      newLikedBy.add(userId);
+      newLikes++;
     }
 
-    return newComment;
+    final updatedComment = comment.copyWith(
+      likes: newLikes,
+      likedBy: newLikedBy,
+    );
+
+    List<CommentModel> updatedComments = List<CommentModel>.from(
+      post.commentsList,
+    );
+    updatedComments[commentIndex] = updatedComment;
+
+    await _postsCollection.doc(postId).update({
+      'comments_list': updatedComments.map((c) => c.toJson()).toList(),
+    });
+
+    // Send notification to comment owner if liked
+    if (!isLiked && comment.userId != userId) {
+      final likingUser = await UserRepository.instance.getUserById(userId);
+      final notification = NotificationModel(
+        id: '',
+        type: NotificationType.like,
+        userId: userId,
+        userName: likingUser?.displayName ?? 'Someone',
+        userAvatar: likingUser?.avatar,
+        message: 'liked your comment',
+        timestamp: DateTime.now(),
+        targetId: postId,
+      );
+      NotificationRepository().addNotification(notification, comment.userId);
+    }
   }
 
   @override

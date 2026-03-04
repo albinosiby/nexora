@@ -1,14 +1,20 @@
-import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import '../theme/nexora_theme.dart';
 import '../../modules/auth/repositories/auth_repository.dart';
 import '../../modules/chat/screens/chat_detail_screen.dart';
+import '../../modules/notifications/screens/notification_screen.dart';
+
+import 'package:firebase_core/firebase_core.dart';
+import '../../firebase_options.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you're going to use other Firebase services in the background, such as Firestore,
-  // make sure you call `Firebase.initializeApp()` first.
+  // Must initialize Firebase in the background isolate first
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
@@ -27,9 +33,21 @@ class PushNotificationService extends GetxService {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       debugPrint('User granted notification permission');
+    } else if (settings.authorizationStatus ==
+        AuthorizationStatus.provisional) {
+      debugPrint('User granted provisional permission');
+    } else {
+      debugPrint('Notification permission: ${settings.authorizationStatus}');
     }
 
-    // Set background message handler
+    // Required on iOS to show foreground notifications as banners
+    await _fcm.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Set background message handler (must be top-level function)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Handle initial message when app is opened from a terminated state
@@ -40,9 +58,35 @@ class PushNotificationService extends GetxService {
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Received foreground message: ${message.notification?.body}');
-      // NotificationController takes care of showing in-app snackbars via Firestore snapshots,
-      // so we don't necessarily need to show another one here unless we want to handle data-only payloads.
+      debugPrint(
+        'Received foreground message: ${message.notification?.title} - ${message.notification?.body}',
+      );
+
+      final notification = message.notification;
+      if (notification != null) {
+        Get.snackbar(
+          notification.title ?? 'Nexora',
+          notification.body ?? '',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: NexoraColors.cardSurface.withOpacity(0.95),
+          colorText: NexoraColors.textPrimary,
+          margin: EdgeInsets.all(16.r),
+          borderRadius: 16.r,
+          duration: const Duration(seconds: 4),
+          onTap: (_) => _handleMessage(message),
+          icon: Icon(
+            Icons.notifications_active_rounded,
+            color: NexoraColors.primaryOrange,
+          ),
+          boxShadows: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        );
+      }
     });
 
     // Handle messages when app is in background but not terminated
@@ -83,10 +127,16 @@ class PushNotificationService extends GetxService {
           preventDuplicates: false,
         );
       }
-    } else if (data['type'] == 'connection') {
-      // In a real app, you might want to find the ConnectionsScreen in the stack or use a specific route
-      // For now, let's just go to the screen
-      // Get.to(() => const ConnectionsScreen());
+    } else if (data['type'] == 'like' ||
+        data['type'] == 'comment' ||
+        data['type'] == 'mention' ||
+        data['type'] == 'feed') {
+      // Redirect to notifications for context, or a single post view if available
+      Get.to(() => const NotificationScreen());
+    } else if (data['type'] == 'connectionRequest' ||
+        data['type'] == 'match' ||
+        data['type'] == 'connection') {
+      Get.to(() => const NotificationScreen());
     }
   }
 }

@@ -491,7 +491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         children: [
           Text(
-            'NEXORA',
+            'Koottu',
             style: NexoraTextStyles.logoStyle.copyWith(fontSize: 18.sp),
           ),
 

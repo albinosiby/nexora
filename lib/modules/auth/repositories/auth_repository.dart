@@ -278,9 +278,9 @@ class AuthRepository extends GetxService {
   /// Save FCM token to Firestore
   Future<void> saveFcmToken(String token) async {
     if (user != null) {
-      await _firestore.collection('users').doc(user!.uid).update({
+      await _firestore.collection('users').doc(user!.uid).set({
         'fcmToken': token,
-      });
+      }, SetOptions(merge: true));
       // Also update local profile if it exists
       if (_currentUserProfile.value != null) {
         _currentUserProfile.value = _currentUserProfile.value!.copyWith(

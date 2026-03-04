@@ -68,7 +68,7 @@ class PostModel {
       username: json['username'] ?? '',
       avatar: (json['avatar'] as String? ?? '').startsWith('http')
           ? json['avatar']
-          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${json['user'] ?? json['username'] ?? json['userId'] ?? 'User'}',
+          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(json['username'] ?? json['user'] ?? json['userId'] ?? 'User')}&backgroundColor=transparent&size=200',
       time: json['time'] ?? '',
       content: json['content'] ?? '',
       likes: json['likes'] ?? 0,
@@ -214,6 +214,8 @@ class CommentModel {
   final String time;
   final DateTime createdAt;
   final List<ReplyModel> replies;
+  final int likes;
+  final List<String> likedBy;
 
   CommentModel({
     required this.id,
@@ -225,7 +227,11 @@ class CommentModel {
     required this.time,
     required this.createdAt,
     this.replies = const [],
+    this.likes = 0,
+    this.likedBy = const [],
   });
+
+  bool isLikedBy(String userId) => likedBy.contains(userId);
 
   String get displayName => username.isNotEmpty
       ? username
@@ -246,13 +252,15 @@ class CommentModel {
       username: json['username'] ?? '',
       avatar: (json['avatar'] as String? ?? '').startsWith('http')
           ? json['avatar']
-          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${json['user'] ?? json['username'] ?? json['userId'] ?? 'User'}',
+          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(json['username'] ?? json['user'] ?? json['userId'] ?? 'User')}&backgroundColor=transparent&size=200',
       comment: json['comment'] ?? '',
       time: json['time'] ?? '',
       createdAt: _parseDate(json['createdAt']),
       replies: (json['replies'] as List? ?? [])
           .map((r) => ReplyModel.fromJson(r))
           .toList(),
+      likes: json['likes'] ?? 0,
+      likedBy: List<String>.from(json['likedBy'] ?? []),
     );
   }
 
@@ -267,6 +275,8 @@ class CommentModel {
       'time': time,
       'createdAt': createdAt.toIso8601String(),
       'replies': replies.map((r) => r.toJson()).toList(),
+      'likes': likes,
+      'likedBy': likedBy,
     };
   }
 
@@ -280,6 +290,8 @@ class CommentModel {
     String? time,
     DateTime? createdAt,
     List<ReplyModel>? replies,
+    int? likes,
+    List<String>? likedBy,
   }) {
     return CommentModel(
       id: id ?? this.id,
@@ -291,6 +303,8 @@ class CommentModel {
       time: time ?? this.time,
       createdAt: createdAt ?? this.createdAt,
       replies: replies ?? this.replies,
+      likes: likes ?? this.likes,
+      likedBy: likedBy ?? this.likedBy,
     );
   }
 }

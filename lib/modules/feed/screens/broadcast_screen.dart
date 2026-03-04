@@ -590,32 +590,6 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
-            // Background Decor (similar to login but darker/premium)
-            Positioned(
-              top: -150.h,
-              right: -100.w,
-              child: Container(
-                width: 400.r,
-                height: 400.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: NexoraColors.primaryPurple.withOpacity(0.08),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -100.h,
-              left: -150.w,
-              child: Container(
-                width: 450.r,
-                height: 450.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: NexoraColors.primaryPurple.withOpacity(0.05),
-                ),
-              ),
-            ),
-
             // Main Content
             postsAsync.when(
               data: (posts) {
@@ -726,17 +700,39 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _createPost,
-          backgroundColor: NexoraColors.primaryPurple,
-          elevation: 8.r,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30.r),
-          ),
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text(
-            'Create Post',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        floatingActionButton: GestureDetector(
+          onTap: _createPost,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
+            decoration: BoxDecoration(
+              gradient: NexoraGradients.primaryButton,
+              borderRadius: BorderRadius.circular(30.r),
+              border: Border.all(
+                color: NexoraColors.primaryPurple.withOpacity(0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: NexoraColors.primaryPurple.withOpacity(0.2),
+                  blurRadius: 12.r,
+                  offset: Offset(0, 4.h),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.add, color: Colors.white),
+                SizedBox(width: 8.w),
+                Text(
+                  'Create Post',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15.sp,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2845,12 +2841,7 @@ class _CreatePostSheetState extends ConsumerState<CreatePostSheet>
                             ),
                             decoration: BoxDecoration(
                               gradient: isSelected
-                                  ? LinearGradient(
-                                      colors: [
-                                        NexoraColors.primaryPurple,
-                                        NexoraColors.deepPurple,
-                                      ],
-                                    )
+                                  ? NexoraGradients.primaryButton
                                   : null,
                               color: isSelected
                                   ? null
@@ -2858,14 +2849,16 @@ class _CreatePostSheetState extends ConsumerState<CreatePostSheet>
                               borderRadius: BorderRadius.circular(20.r),
                               border: Border.all(
                                 color: isSelected
-                                    ? Colors.transparent
+                                    ? NexoraColors.primaryPurple.withOpacity(
+                                        0.3,
+                                      )
                                     : NexoraColors.glassBorder,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
                                         color: NexoraColors.primaryPurple
-                                            .withOpacity(0.3),
+                                            .withOpacity(0.2),
                                         blurRadius: 8.r,
                                         spreadRadius: 1.r,
                                       ),
@@ -3062,19 +3055,12 @@ class _CreatePostSheetState extends ConsumerState<CreatePostSheet>
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    NexoraColors.primaryPurple.withOpacity(0.2),
-                    NexoraColors.primaryPurple.withOpacity(0.1),
-                  ],
-                )
-              : null,
+          gradient: isSelected ? NexoraGradients.primaryButton : null,
           color: isSelected ? null : NexoraColors.glassBackground,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(16.r),
           border: Border.all(
             color: isSelected
-                ? NexoraColors.primaryPurple
+                ? NexoraColors.primaryPurple.withOpacity(0.3)
                 : NexoraColors.glassBorder,
             width: isSelected ? 1.5 : 1,
           ),
@@ -3210,8 +3196,26 @@ class _CommentsSheetState extends State<CommentsSheet> {
       SnackBar(
         content: const Text('Your comment was posted successfully'),
         backgroundColor: NexoraColors.accentCyan.withOpacity(0.9),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.all(16.r),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+        ),
       ),
     );
+  }
+
+  void _toggleCommentLike(CommentModel comment) {
+    HapticFeedback.lightImpact();
+    final currentUserId = fb.FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId == null) return;
+
+    PostRepository.instance.toggleCommentLike(
+      widget.post.id,
+      comment.id,
+      currentUserId,
+    );
+    // UI updates via stream in parent
   }
 
   @override
@@ -3298,8 +3302,37 @@ class _CommentsSheetState extends State<CommentsSheet> {
 
           // Comments list
           Expanded(
-            child: _comments.isEmpty
-                ? Center(
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('feed')
+                  .doc(widget.post.id)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation(
+                        NexoraColors.primaryPurple,
+                      ),
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data?.data() == null) {
+                  return Center(
+                    child: Text(
+                      'Post no longer available',
+                      style: TextStyle(color: NexoraColors.textMuted),
+                    ),
+                  );
+                }
+
+                final post = PostModel.fromFirestore(snapshot.data!);
+                final comments = post.commentsList;
+
+                if (comments.isEmpty) {
+                  return Center(
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       child: Column(
@@ -3337,18 +3370,22 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         ],
                       ),
                     ),
-                  )
-                : ListView.builder(
-                    padding: EdgeInsets.symmetric(horizontal: 16.w),
-                    itemCount: _comments.length,
-                    itemBuilder: (context, index) {
-                      final comment = _comments[index];
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: 16.h),
-                        child: _buildCommentItem(comment),
-                      );
-                    },
-                  ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = comments[index];
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: 16.h),
+                      child: _buildCommentItem(comment),
+                    );
+                  },
+                );
+              },
+            ),
           ),
 
           // Enhanced comment input
@@ -3387,11 +3424,13 @@ class _CommentsSheetState extends State<CommentsSheet> {
                     ),
                     child: Center(
                       child:
-                          widget.userAvatar != null &&
-                              widget.userAvatar!.isNotEmpty
+                          (widget.userAvatar != null &&
+                              widget.userAvatar!.isNotEmpty)
                           ? ClipOval(
                               child: Image.network(
-                                widget.userAvatar!,
+                                widget.userAvatar!.startsWith('http')
+                                    ? widget.userAvatar!
+                                    : 'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(widget.userName)}&backgroundColor=transparent&size=200',
                                 width: 40.w,
                                 height: 40.w,
                                 fit: BoxFit.cover,
@@ -3541,29 +3580,22 @@ class _CommentsSheetState extends State<CommentsSheet> {
           child: Center(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20.w),
-              child: comment.avatar.isNotEmpty
-                  ? Image.network(
-                      comment.avatar,
-                      width: 40.w,
-                      height: 40.w,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Text(
-                        comment.displayName[0].toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    )
-                  : Text(
-                      comment.displayName[0].toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+              child: Image.network(
+                comment.avatar.startsWith('http')
+                    ? comment.avatar
+                    : 'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(comment.displayName)}&backgroundColor=transparent&size=200',
+                width: 40.w,
+                height: 40.w,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Text(
+                  comment.displayName[0].toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -3619,21 +3651,35 @@ class _CommentsSheetState extends State<CommentsSheet> {
                 child: Row(
                   children: [
                     GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                      },
+                      onTap: () => _toggleCommentLike(comment),
                       child: Row(
                         children: [
                           Icon(
-                            Icons.favorite_border,
+                            comment.likedBy.contains(
+                                  fb.FirebaseAuth.instance.currentUser?.uid,
+                                )
+                                ? Icons.favorite
+                                : Icons.favorite_border,
                             size: 14.r,
-                            color: NexoraColors.textMuted,
+                            color:
+                                comment.likedBy.contains(
+                                  fb.FirebaseAuth.instance.currentUser?.uid,
+                                )
+                                ? NexoraColors.romanticPink
+                                : NexoraColors.textMuted,
                           ),
                           SizedBox(width: 4.w),
                           Text(
-                            'Like',
+                            comment.likes > 0
+                                ? '${comment.likes} Like${comment.likes > 1 ? 's' : ''}'
+                                : 'Like',
                             style: TextStyle(
-                              color: NexoraColors.textMuted,
+                              color:
+                                  comment.likedBy.contains(
+                                    fb.FirebaseAuth.instance.currentUser?.uid,
+                                  )
+                                  ? NexoraColors.romanticPink
+                                  : NexoraColors.textMuted,
                               fontSize: 11.sp,
                             ),
                           ),

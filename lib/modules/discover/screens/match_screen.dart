@@ -28,7 +28,7 @@ class _MatchScreenState extends State<MatchScreen>
   final NotificationController _notificationController =
       Get.find<NotificationController>();
 
-  final List<String> _filters = ['All', 'Online', 'New', 'Verified'];
+  final List<String> _filters = ['All', 'Online', 'New'];
 
   @override
   void initState() {
@@ -66,41 +66,6 @@ class _MatchScreenState extends State<MatchScreen>
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
-            // Background gradient orbs
-            Positioned(
-              top: -100.h,
-              right: -100.w,
-              child: Container(
-                width: 300.r,
-                height: 300.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      NexoraColors.primaryPurple.withOpacity(0.2),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 150.h,
-              left: -80.w,
-              child: Container(
-                width: 250.r,
-                height: 250.r,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      NexoraColors.romanticPink.withOpacity(0.12),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
             CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
@@ -351,10 +316,10 @@ class _MatchScreenState extends State<MatchScreen>
                     padding: EdgeInsets.all(20.r),
                     sliver: SliverGrid(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 16.h,
-                        crossAxisSpacing: 16.w,
-                        childAspectRatio: 0.8,
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 12.h,
+                        crossAxisSpacing: 12.w,
+                        childAspectRatio: 0.7,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) =>
@@ -492,17 +457,17 @@ class _MatchScreenState extends State<MatchScreen>
       onTap: () => _navigateToProfile(user),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(16.r),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 15.r,
-              offset: Offset(0, 6.h),
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 10.r,
+              offset: Offset(0, 4.h),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24.r),
+          borderRadius: BorderRadius.circular(16.r),
           child: Stack(
             children: [
               // Full-bleed Profile Image
@@ -510,22 +475,9 @@ class _MatchScreenState extends State<MatchScreen>
                 child: Image.network(
                   user.avatar,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    decoration: BoxDecoration(
-                      gradient: NexoraGradients.primaryButton,
-                    ),
-                    child: Center(
-                      child: Text(
-                        user.displayName.isNotEmpty
-                            ? user.displayName[0].toUpperCase()
-                            : '?',
-                        style: TextStyle(
-                          fontSize: 40.sp,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  errorBuilder: (context, error, stackTrace) => Image.network(
+                    'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(user.displayName)}&backgroundColor=transparent&size=200',
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),
@@ -563,7 +515,7 @@ class _MatchScreenState extends State<MatchScreen>
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18.sp,
+                        fontSize: 13.sp,
                         shadows: [
                           Shadow(
                             color: Colors.black45,
@@ -575,14 +527,14 @@ class _MatchScreenState extends State<MatchScreen>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 12.h),
+                    SizedBox(height: 8.h),
 
                     // Modern Footer Buttons
                     Container(
-                      height: 44.h,
+                      height: 32.h,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(22.r),
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16.r),
                         border: Border.all(
                           color: Colors.white.withOpacity(0.1),
                           width: 0.5,
@@ -596,23 +548,23 @@ class _MatchScreenState extends State<MatchScreen>
                               onTap: () => _openChat(user),
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.black,
+                                  color: Colors.black.withOpacity(0.5),
                                   borderRadius: BorderRadius.horizontal(
-                                    left: Radius.circular(22.r),
+                                    left: Radius.circular(16.r),
                                   ),
                                 ),
                                 child: Center(
                                   child: Icon(
                                     Icons.chat_bubble_outline_rounded,
                                     color: Colors.white,
-                                    size: 20.r,
+                                    size: 14.r,
                                   ),
                                 ),
                               ),
                             ),
                           ),
                           // Chat/Connect Button
-                          Expanded(child: _buildOrangeActionButton(user)),
+                          Expanded(child: _buildGlassyActionButton(user)),
                         ],
                       ),
                     ),
@@ -655,7 +607,7 @@ class _MatchScreenState extends State<MatchScreen>
     );
   }
 
-  Widget _buildOrangeActionButton(MatchUserModel user) {
+  Widget _buildGlassyActionButton(MatchUserModel user) {
     final userId = user.id;
     return Obx(() {
       final status = _connectionService.getStatus(userId);
@@ -684,8 +636,8 @@ class _MatchScreenState extends State<MatchScreen>
         },
         child: Container(
           decoration: BoxDecoration(
-            gradient: NexoraGradients.glassyGradient,
-            borderRadius: BorderRadius.horizontal(right: Radius.circular(22.r)),
+            gradient: NexoraGradients.primaryButton,
+            borderRadius: BorderRadius.horizontal(right: Radius.circular(16.r)),
             border: Border.all(
               color: NexoraColors.primaryPurple.withOpacity(0.2),
               width: 1.w,
@@ -696,11 +648,10 @@ class _MatchScreenState extends State<MatchScreen>
               isPending
                   ? Icons.hourglass_empty_rounded
                   : isConnected
-                  ? Icons
-                        .check_circle_rounded // Change from chat_bubble_rounded
+                  ? Icons.check_circle_rounded
                   : Icons.person_add_rounded,
               color: Colors.white,
-              size: 20.r,
+              size: 14.r,
             ),
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../repositories/chat_repository.dart';
 import '../models/message_model.dart';
 import '../models/chat_model.dart';
@@ -59,3 +60,29 @@ final typingUsersProvider = StreamProvider.family
       final repo = ref.watch(chatRepositoryProvider);
       return repo.getTypingUsersStream(chatId);
     });
+
+// Stream of metadata for the community chat
+final communityMetadataProvider =
+    StreamProvider.autoDispose<Map<String, dynamic>>((ref) {
+      final db = FirebaseDatabase.instance;
+      return db.ref('chats/community').onValue.map((event) {
+        if (event.snapshot.value == null) return {};
+        return Map<String, dynamic>.from(event.snapshot.value as Map);
+      });
+    });
+// Provider for total unread message count for all chats
+final totalUnreadCountProvider = Provider<int>((ref) {
+  final chatsAsync = ref.watch(recentChatsProvider);
+  return chatsAsync.when(
+    data: (chats) {
+      final currentUserId = ChatRepository.instance.currentUserId;
+      if (currentUserId == null) return 0;
+      return chats.fold(
+        0,
+        (sum, chat) => sum + (chat.unreadCounts[currentUserId] ?? 0),
+      );
+    },
+    loading: () => 0,
+    error: (_, __) => 0,
+  );
+});

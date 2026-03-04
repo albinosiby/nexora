@@ -10,6 +10,7 @@ import 'chat_detail_screen.dart';
 import '../../profile/models/profile_model.dart';
 import '../../profile/screens/profile_view_screen.dart';
 import '../providers/chat_provider.dart';
+import 'community_chat_screen.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -163,7 +164,20 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                       ),
 
                       // Chat List
-                      Expanded(child: _buildChatList(chats)),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: () async =>
+                              ref.invalidate(recentChatsProvider),
+                          color: NexoraColors.primaryPurple,
+                          backgroundColor: NexoraColors.midnightDark,
+                          child: Column(
+                            children: [
+                              _buildCommunityCard(),
+                              Expanded(child: _buildChatList(chats)),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   );
                 },
@@ -666,6 +680,116 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCommunityCard() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final metadataAsync = ref.watch(communityMetadataProvider);
+
+        return metadataAsync.when(
+          data: (metadata) {
+            final lastMessage =
+                metadata['lastMessage'] as String? ??
+                'Join the global conversation';
+
+            return Container(
+              margin: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 16.h),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    NexoraPageRoute(page: const CommunityChatScreen()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(20.r),
+                child: Container(
+                  padding: EdgeInsets.all(16.r),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        NexoraColors.primaryPurple.withOpacity(0.15),
+                        NexoraColors.primaryPurple.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(
+                      color: NexoraColors.primaryPurple.withOpacity(0.2),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: NexoraColors.primaryPurple.withOpacity(0.1),
+                        blurRadius: 15.r,
+                        offset: Offset(0, 8.h),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 54.r,
+                        height: 54.r,
+                        decoration: BoxDecoration(
+                          gradient: NexoraGradients.primaryButton,
+                          borderRadius: BorderRadius.circular(16.r),
+                        ),
+                        child: Icon(
+                          Icons.groups_rounded,
+                          color: Colors.white,
+                          size: 28.r,
+                        ),
+                      ),
+                      SizedBox(width: 16.w),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Community Chat',
+                              style: TextStyle(
+                                fontSize: 18.sp,
+                                fontWeight: FontWeight.bold,
+                                color: NexoraColors.textPrimary,
+                              ),
+                            ),
+                            SizedBox(height: 4.h),
+                            Text(
+                              lastMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13.sp,
+                                color: NexoraColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: NexoraColors.primaryPurple.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: NexoraColors.primaryPurple,
+                          size: 24.r,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

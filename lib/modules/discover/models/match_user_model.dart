@@ -54,9 +54,9 @@ class MatchUserModel {
       major: data['major'] ?? '',
       bio: data['bio'] ?? '',
       interests: List<String>.from(data['interests'] ?? []),
-      avatar:
-          data['avatar'] ??
-          'https://api.dicebear.com/7.x/avataaars/png?seed=${data['name'] ?? 'User'}',
+      avatar: (data['avatar'] as String? ?? '').startsWith('http')
+          ? data['avatar']
+          : 'https://api.dicebear.com/7.x/avataaars/png?seed=${Uri.encodeComponent(data['username'] ?? data['name'] ?? 'User')}&backgroundColor=transparent&size=200',
       connections: data['followers'] ?? data['connections'] ?? 0,
       isOnline: data['isOnline'] ?? false,
       isVerified: data['isVerified'] ?? false,

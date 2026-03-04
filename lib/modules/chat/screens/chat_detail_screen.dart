@@ -1746,24 +1746,24 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
     final senderChanged =
         index > 0 && _messages[index - 1].senderId != message.senderId;
 
-    return Dismissible(
-      key: Key(message.id),
-      direction: DismissDirection.startToEnd,
-      confirmDismiss: (direction) async {
-        setState(() => _replyingToMessage = message);
-        return false; // Don't actually dismiss
-      },
-      background: Container(
-        padding: EdgeInsets.only(left: 20.w),
-        alignment: Alignment.centerLeft,
-        child: Icon(
-          Icons.reply_rounded,
-          color: NexoraColors.primaryPurple,
-          size: 24.r,
+    return GestureDetector(
+      onLongPress: () => _showReactionSheet(message),
+      child: Dismissible(
+        key: Key(message.id),
+        direction: DismissDirection.startToEnd,
+        confirmDismiss: (direction) async {
+          setState(() => _replyingToMessage = message);
+          return false; // Don't actually dismiss
+        },
+        background: Container(
+          padding: EdgeInsets.only(left: 20.w),
+          alignment: Alignment.centerLeft,
+          child: Icon(
+            Icons.reply_rounded,
+            color: NexoraColors.primaryOrange,
+            size: 24.r,
+          ),
         ),
-      ),
-      child: GestureDetector(
-        onLongPress: () => _showReactionSheet(message),
         child: Container(
           margin: EdgeInsets.only(
             left: isSender ? 60.w : 0,
@@ -1794,14 +1794,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                             ),
                       decoration: BoxDecoration(
                         gradient: isSender
-                            ? LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  NexoraColors.deepPurple,
-                                  NexoraColors.primaryPurple.withOpacity(0.9),
-                                ],
-                              )
+                            ? NexoraGradients.primaryButton
                             : null,
                         color: isSender ? null : NexoraColors.glassBackground,
                         borderRadius: BorderRadius.only(
@@ -1810,13 +1803,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                           bottomLeft: Radius.circular(isSender ? 18.r : 4.r),
                           bottomRight: Radius.circular(isSender ? 4.r : 18.r),
                         ),
-                        border: isSender
-                            ? null
-                            : Border.all(color: NexoraColors.glassBorder),
+                        border: Border.all(
+                          color: isSender
+                              ? NexoraColors.primaryPurple.withOpacity(0.2)
+                              : NexoraColors.glassBorder,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: isSender
-                                ? NexoraColors.primaryPurple.withOpacity(0.25)
+                                ? NexoraColors.primaryPurple.withOpacity(0.15)
                                 : Colors.black.withOpacity(0.15),
                             blurRadius: 8.r,
                             offset: Offset(0, 3.h),

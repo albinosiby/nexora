@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/nexora_theme.dart';
 import '../repositories/connection_service.dart';
 
@@ -34,8 +35,8 @@ class ConnectionUserCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Avatar
-          GestureDetector(onTap: onTap, child: _buildAvatar()),
+          // Avatar — fetches live from Firestore
+          GestureDetector(onTap: onTap, child: _buildLiveAvatar()),
           const SizedBox(width: 12),
           // Info
           Expanded(
@@ -82,35 +83,54 @@ class ConnectionUserCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar() {
-    final hasAvatar =
-        request.avatar != null &&
-        request.avatar!.isNotEmpty &&
-        request.avatar!.startsWith('http');
+  /// Fetches the latest avatar URL from Firestore in real-time
+  Widget _buildLiveAvatar() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(request.userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        String? liveAvatar;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          liveAvatar = data?['avatar'] as String?;
+        }
+        // Fall back to cached avatar from connection request
+        final avatarUrl = (liveAvatar != null && liveAvatar.isNotEmpty)
+            ? liveAvatar
+            : request.avatar;
 
-    return Container(
-      width: 56.w,
-      height: 56.w,
-      decoration: BoxDecoration(
-        gradient: NexoraGradients.primaryButton,
-        shape: BoxShape.circle,
-      ),
-      child: ClipOval(
-        child: hasAvatar
-            ? Image.network(
-                request.avatar!,
-                width: 56.w,
-                height: 56.w,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return _buildAvatarPlaceholder();
-                },
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildAvatarPlaceholder(),
-              )
-            : _buildAvatarPlaceholder(),
-      ),
+        final hasAvatar =
+            avatarUrl != null &&
+            avatarUrl.isNotEmpty &&
+            avatarUrl.startsWith('http');
+
+        return Container(
+          width: 56.w,
+          height: 56.w,
+          decoration: BoxDecoration(
+            gradient: NexoraGradients.primaryButton,
+            shape: BoxShape.circle,
+          ),
+          child: ClipOval(
+            child: hasAvatar
+                ? Image.network(
+                    avatarUrl,
+                    width: 56.w,
+                    height: 56.w,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return _buildAvatarPlaceholder();
+                    },
+                    errorBuilder: (context, error, stackTrace) =>
+                        _buildAvatarPlaceholder(),
+                  )
+                : _buildAvatarPlaceholder(),
+          ),
+        );
+      },
     );
   }
 
